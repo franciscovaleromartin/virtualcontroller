@@ -219,16 +219,29 @@ def obtener_tareas_de_lista(lista_id, headers):
                 # Fecha de última actualización
                 fecha_actualizacion = datetime.fromtimestamp(int(tarea['date_updated']) / 1000).strftime('%Y-%m-%d %H:%M:%S')
 
-                # Obtener tiempo trabajado (time tracked) en milisegundos
-                time_spent = tarea.get('time_spent', 0)
-                # Convertir a horas y minutos
-                if time_spent > 0:
-                    total_minutos = time_spent // 60000  # Convertir de ms a minutos
-                    horas_trabajadas = total_minutos // 60
-                    minutos_trabajados = total_minutos % 60
+                # Calcular tiempo trabajado según el estado de la tarea
+                fecha_creacion = datetime.fromtimestamp(int(tarea['date_created']) / 1000)
+
+                if estado == 'completada':
+                    # Para tareas completadas: tiempo desde creación hasta cierre
+                    if tarea.get('date_closed'):
+                        fecha_fin = datetime.fromtimestamp(int(tarea['date_closed']) / 1000)
+                    elif tarea.get('date_done'):
+                        fecha_fin = datetime.fromtimestamp(int(tarea['date_done']) / 1000)
+                    else:
+                        fecha_fin = datetime.now()
+                    tiempo_total = fecha_fin - fecha_creacion
+                elif estado == 'en_progreso':
+                    # Para tareas en progreso: tiempo desde creación hasta ahora
+                    tiempo_total = datetime.now() - fecha_creacion
                 else:
-                    horas_trabajadas = 0
-                    minutos_trabajados = 0
+                    # Para tareas pendientes/to do: 0
+                    tiempo_total = timedelta(0)
+
+                # Convertir a horas y minutos
+                total_segundos = int(tiempo_total.total_seconds())
+                horas_trabajadas = total_segundos // 3600
+                minutos_trabajados = (total_segundos % 3600) // 60
 
                 # Obtener configuración de alerta para esta tarea desde el diccionario en memoria
                 alerta_config = alertas_tareas.get(tarea['id'], {
