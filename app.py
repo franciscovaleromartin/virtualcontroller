@@ -347,20 +347,29 @@ def calcular_tiempo_en_progreso(tarea_id, estado_actual, headers):
 
                     fecha_cambio = datetime.fromtimestamp(int(item.get('date', 0)) / 1000)
 
-                    # Si entró en "in progress"
-                    if ('progress' in nuevo_estado_lower or 'doing' in nuevo_estado_lower or 'in progress' in nuevo_estado_lower):
-                        if ultima_entrada_in_progress is None:
-                            ultima_entrada_in_progress = fecha_cambio
-                            print(f"[DEBUG] Tarea {tarea_id} entró en 'in progress' en {fecha_cambio}")
+                    print(f"[DEBUG] Cambio de estado detectado: '{estado_previo_nombre}' -> '{nuevo_estado_nombre}' en {fecha_cambio}")
 
-                    # Si salió de "in progress" (y estaba en in progress antes)
-                    elif ('progress' in estado_previo_lower or 'doing' in estado_previo_lower or 'in progress' in estado_previo_lower):
+                    # Detectar si es un estado "in progress"
+                    es_estado_in_progress_nuevo = ('progress' in nuevo_estado_lower or 'doing' in nuevo_estado_lower)
+                    es_estado_in_progress_previo = ('progress' in estado_previo_lower or 'doing' in estado_previo_lower)
+
+                    # Si entró en "in progress"
+                    if es_estado_in_progress_nuevo and not es_estado_in_progress_previo:
+                        ultima_entrada_in_progress = fecha_cambio
+                        print(f"[INFO] ✓ Tarea {tarea_id} ENTRÓ en 'in progress' en {fecha_cambio}")
+
+                    # Si salió de "in progress"
+                    elif not es_estado_in_progress_nuevo and es_estado_in_progress_previo:
                         if ultima_entrada_in_progress is not None:
                             # Calcular el tiempo que estuvo en "in progress"
                             tiempo_periodo = (fecha_cambio - ultima_entrada_in_progress).total_seconds()
                             tiempo_total_segundos += tiempo_periodo
-                            print(f"[DEBUG] Tarea {tarea_id} salió de 'in progress' en {fecha_cambio}, tiempo del período: {tiempo_periodo/3600:.2f}h")
+                            print(f"[INFO] ✓ Tarea {tarea_id} SALIÓ de 'in progress' en {fecha_cambio}")
+                            print(f"[INFO]   Tiempo del período: {tiempo_periodo/3600:.2f}h ({tiempo_periodo/60:.1f}min)")
+                            print(f"[INFO]   Tiempo total acumulado: {tiempo_total_segundos/3600:.2f}h")
                             ultima_entrada_in_progress = None
+                        else:
+                            print(f"[WARNING] Tarea salió de 'in progress' pero no hay fecha de entrada registrada")
 
             print(f"[DEBUG] Se encontraron {cambios_estado_count} cambios de estado en el historial")
 
