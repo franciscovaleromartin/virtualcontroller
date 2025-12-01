@@ -286,7 +286,7 @@ def get_lists(space_id):
         return jsonify({'error': str(e)}), 500
 
 def calcular_tiempo_en_progreso(tarea_id, estado_actual, headers):
-    """Calcula el tiempo total que una tarea ha estado en estado 'in progress' usando el historial de cambios"""
+    """Calcula el tiempo total que una tarea ha estado en estado 'in progress' usando time_in_status de ClickUp"""
     try:
         # Obtener información completa de la tarea
         tarea_response = requests.get(
@@ -306,89 +306,69 @@ def calcular_tiempo_en_progreso(tarea_id, estado_actual, headers):
         estado_actual_nombre = tarea_info.get('status', {}).get('status', 'Sin estado')
         print(f"[INFO] Estado actual de tarea {tarea_id}: {estado_actual_nombre}")
 
-        # Siempre calcular el tiempo basándose en el historial de cambios de estado a "In Progress"
-        history_response = requests.get(
-            f'https://api.clickup.com/api/v2/task/{tarea_id}/history',
+        # Usar el endpoint de time_in_status para obtener el tiempo en cada estado
+        time_in_status_response = requests.get(
+            f'https://api.clickup.com/api/v2/task/{tarea_id}/time_in_status',
             headers=headers,
-            params={'page': 0},
             timeout=10
         )
 
         tiempo_total_segundos = 0
 
-        if history_response.status_code == 200:
-            history = history_response.json().get('history', [])
+        if time_in_status_response.status_code == 200:
+            time_in_status_data = time_in_status_response.json()
 
-            # Ordenar el historial por fecha (más antiguo primero)
-            history_sorted = sorted(history, key=lambda x: x.get('date', 0))
+            print(f"[INFO] Obteniendo tiempo por estado desde ClickUp time_in_status")
 
-            # Variables para rastrear períodos en "in progress"
-            ultima_entrada_in_progress = None
+            # El formato esperado de respuesta:
+            # {
+            #   "current_status": {...},
+            #   "status_history": [...]
+            # }
 
-            print(f"[INFO] Calculando tiempo 'In Progress' desde historial de activity para tarea {tarea_id}")
-            print(f"[DEBUG] Procesando {len(history_sorted)} eventos de historial")
+            status_history = time_in_status_data.get('status_history', [])
+            current_status = time_in_status_data.get('current_status', {})
 
-            if len(history_sorted) == 0:
-                print(f"[WARNING] No hay eventos en el historial de la tarea {tarea_id}")
+            print(f"[DEBUG] Estados en historial: {len(status_history)}")
 
-            cambios_estado_count = 0
-            for item in history_sorted:
-                # Verificar si es un cambio de estado
-                if item.get('field') == 'status':
-                    cambios_estado_count += 1
-                    estado_previo = item.get('before', {})
-                    nuevo_estado = item.get('after', {})
+            # Sumar tiempo de todos los estados que contengan "progress" o "doing"
+            for status_entry in status_history:
+                status_name = status_entry.get('status', '').lower()
+                total_time = status_entry.get('total_time', {})
 
-                    estado_previo_nombre = estado_previo.get('status', '') if isinstance(estado_previo, dict) else str(estado_previo)
-                    nuevo_estado_nombre = nuevo_estado.get('status', '') if isinstance(nuevo_estado, dict) else str(nuevo_estado)
+                # Verificar si es un estado "in progress"
+                if 'progress' in status_name or 'doing' in status_name:
+                    # El tiempo puede venir en diferentes formatos
+                    # Intentar obtener milisegundos primero
+                    if 'by_minute' in total_time:
+                        minutos = total_time['by_minute']
+                        segundos = minutos * 60
+                    elif 'milliseconds' in total_time:
+                        segundos = total_time['milliseconds'] / 1000
+                    else:
+                        segundos = 0
 
-                    estado_previo_lower = estado_previo_nombre.lower()
-                    nuevo_estado_lower = nuevo_estado_nombre.lower()
+                    tiempo_total_segundos += segundos
+                    print(f"[INFO] ✓ Estado '{status_entry.get('status')}': {segundos/3600:.2f}h ({segundos/60:.1f}min)")
 
-                    fecha_cambio = datetime.fromtimestamp(int(item.get('date', 0)) / 1000)
+            # Si el estado actual es "in progress", también incluir su tiempo
+            if current_status:
+                current_status_name = current_status.get('status', '').lower()
+                if 'progress' in current_status_name or 'doing' in current_status_name:
+                    total_time = current_status.get('total_time', {})
+                    if 'by_minute' in total_time:
+                        minutos = total_time['by_minute']
+                        segundos = minutos * 60
+                        tiempo_total_segundos += segundos
+                        print(f"[INFO] ✓ Estado actual '{current_status.get('status')}': {segundos/3600:.2f}h ({segundos/60:.1f}min)")
 
-                    print(f"[DEBUG] Cambio de estado detectado: '{estado_previo_nombre}' -> '{nuevo_estado_nombre}' en {fecha_cambio}")
-
-                    # Detectar si es un estado "in progress"
-                    es_estado_in_progress_nuevo = ('progress' in nuevo_estado_lower or 'doing' in nuevo_estado_lower)
-                    es_estado_in_progress_previo = ('progress' in estado_previo_lower or 'doing' in estado_previo_lower)
-
-                    # Si entró en "in progress"
-                    if es_estado_in_progress_nuevo and not es_estado_in_progress_previo:
-                        ultima_entrada_in_progress = fecha_cambio
-                        print(f"[INFO] ✓ Tarea {tarea_id} ENTRÓ en 'in progress' en {fecha_cambio}")
-
-                    # Si salió de "in progress"
-                    elif not es_estado_in_progress_nuevo and es_estado_in_progress_previo:
-                        if ultima_entrada_in_progress is not None:
-                            # Calcular el tiempo que estuvo en "in progress"
-                            tiempo_periodo = (fecha_cambio - ultima_entrada_in_progress).total_seconds()
-                            tiempo_total_segundos += tiempo_periodo
-                            print(f"[INFO] ✓ Tarea {tarea_id} SALIÓ de 'in progress' en {fecha_cambio}")
-                            print(f"[INFO]   Tiempo del período: {tiempo_periodo/3600:.2f}h ({tiempo_periodo/60:.1f}min)")
-                            print(f"[INFO]   Tiempo total acumulado: {tiempo_total_segundos/3600:.2f}h")
-                            ultima_entrada_in_progress = None
-                        else:
-                            print(f"[WARNING] Tarea salió de 'in progress' pero no hay fecha de entrada registrada")
-
-            print(f"[DEBUG] Se encontraron {cambios_estado_count} cambios de estado en el historial")
-
-            # Si actualmente está en "in progress", contar desde la última entrada hasta ahora
-            if ('progress' in estado_actual_lower or 'doing' in estado_actual_lower or 'in progress' in estado_actual_lower):
-                if ultima_entrada_in_progress is not None:
-                    tiempo_periodo = (datetime.now() - ultima_entrada_in_progress).total_seconds()
-                    tiempo_total_segundos += tiempo_periodo
-                    print(f"[INFO] Tarea actualmente en 'In Progress' desde {ultima_entrada_in_progress.strftime('%Y-%m-%d %H:%M:%S')}")
-                    print(f"[DEBUG] Tiempo adicional del período actual: {tiempo_periodo/3600:.2f}h")
-
-            print(f"[DEBUG] Tiempo total calculado para tarea {tarea_id}: {tiempo_total_segundos/3600:.2f}h")
-
-            if tiempo_total_segundos == 0:
-                print(f"[WARNING] No se encontraron períodos en estado 'In Progress' para la tarea {tarea_id}")
+            print(f"[INFO] Tiempo total en estados 'In Progress': {tiempo_total_segundos/3600:.2f}h")
 
         else:
-            print(f"[WARNING] No se pudo obtener historial para tarea {tarea_id}, status code: {history_response.status_code}")
-            # Si no hay historial, retornar 0
+            print(f"[WARNING] No se pudo obtener time_in_status para tarea {tarea_id}, status code: {time_in_status_response.status_code}")
+            if time_in_status_response.status_code == 404:
+                print(f"[ERROR] La ClickApp 'Total time in Status' NO está habilitada en tu Workspace")
+                print(f"[INFO] Para habilitarla: Settings > ClickApps > Busca 'Time in Status' > Activar")
             return 0, 0
 
         # Convertir a horas y minutos
