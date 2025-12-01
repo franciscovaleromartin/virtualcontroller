@@ -149,25 +149,132 @@
             background-color: #f5c6cb !important;
         }
 
-        .total-horas {
-            margin-top: 20px;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            border: 2px solid #667eea;
-            text-align: center;
+        .btn-config {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s;
         }
 
-        .total-horas h3 {
+        .btn-config:hover {
+            background: #5568d3;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 10% auto;
+            padding: 30px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            margin-bottom: 20px;
+        }
+
+        .modal-header h2 {
             color: #667eea;
             font-size: 1.5em;
-            margin-bottom: 10px;
         }
 
-        .total-horas .valor {
-            font-size: 2em;
-            font-weight: bold;
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
             color: #333;
+        }
+
+        .form-group input[type="text"],
+        .form-group input[type="email"],
+        .form-group input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .form-group input[type="checkbox"] {
+            margin-right: 8px;
+        }
+
+        .inline-inputs {
+            display: flex;
+            gap: 10px;
+        }
+
+        .inline-inputs input {
+            flex: 1;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #d0d0d0;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .alerta-activa {
+            background-color: #fff3cd !important;
+        }
+
+        .alerta-activa:hover {
+            background-color: #ffecb3 !important;
         }
 
         .tarea-link {
@@ -231,18 +338,54 @@
                         <tr>
                             <th>Tarea</th>
                             <th>Estado</th>
+                            <th>Comienzo</th>
+                            <th>Término</th>
                             <th>Última Actualización</th>
-                            <th>Horas Estimadas</th>
+                            <th>Configuración de Alerta</th>
                         </tr>
                     </thead>
                     <tbody id="lists-tbody">
                     </tbody>
                 </table>
-                <div id="total-horas-container" class="total-horas hidden">
-                    <h3>Total de Horas del Trabajo</h3>
-                    <div class="valor" id="total-horas">0 horas</div>
-                </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal para configurar alertas -->
+    <div id="alerta-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Configurar Alerta</h2>
+                <p id="modal-tarea-nombre" style="color: #666; margin-top: 5px;"></p>
+            </div>
+            <form id="alerta-form">
+                <input type="hidden" id="modal-tarea-id">
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="aviso-activado">
+                        <span>Activar aviso de demora</span>
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label for="email-aviso">Email para notificaciones:</label>
+                    <input type="email" id="email-aviso" placeholder="ejemplo@correo.com">
+                </div>
+
+                <div class="form-group">
+                    <label>Tiempo sin actualización para enviar alerta:</label>
+                    <div class="inline-inputs">
+                        <input type="number" id="aviso-horas" placeholder="Horas" min="0" value="0">
+                        <input type="number" id="aviso-minutos" placeholder="Minutos" min="0" value="0">
+                    </div>
+                </div>
+
+                <div class="modal-buttons">
+                    <button type="button" class="btn btn-secondary" onclick="cerrarModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -287,13 +430,14 @@
             }
         }
 
+        // Variable global para almacenar las tareas actuales
+        let tareasActuales = [];
+
         // Función para cargar listas de un space
         async function cargarListas(spaceId) {
             const loading = document.getElementById('loading');
             const tableContainer = document.getElementById('table-container');
             const tbody = document.getElementById('lists-tbody');
-            const totalHorasContainer = document.getElementById('total-horas-container');
-            const totalHorasDiv = document.getElementById('total-horas');
 
             loading.classList.remove('hidden');
             tableContainer.classList.add('hidden');
@@ -310,38 +454,49 @@
                 }
 
                 tbody.innerHTML = '';
-                let totalHoras = 0;
+                tareasActuales = data.tasks;
 
                 data.tasks.forEach(tarea => {
                     const tr = document.createElement('tr');
 
-                    // Aplicar clase según el estado
+                    // Aplicar clase según el estado y si tiene alerta activa
                     if (tarea.estado === 'completada') {
                         tr.className = 'tarea-completada';
                     } else if (tarea.estado === 'en_progreso') {
                         tr.className = 'tarea-en-progreso';
                     }
 
+                    if (tarea.alerta && tarea.alerta.aviso_activado) {
+                        tr.className = (tr.className ? tr.className + ' ' : '') + 'alerta-activa';
+                    }
+
+                    const estadoAlerta = tarea.alerta && tarea.alerta.aviso_activado ?
+                        `Activa (${tarea.alerta.aviso_horas}h ${tarea.alerta.aviso_minutos}m)` :
+                        'Sin configurar';
+
                     tr.innerHTML = `
                         <td>
                             <a href="${tarea.url}" target="_blank" class="tarea-link">${tarea.nombre}</a>
                         </td>
                         <td><strong>${tarea.estado_texto}</strong></td>
+                        <td>${tarea.fecha_comienzo}</td>
+                        <td>${tarea.fecha_termino}</td>
                         <td>${tarea.fecha_actualizacion}</td>
-                        <td>${tarea.horas_estimadas} h</td>
+                        <td>
+                            <button class="btn-config" onclick="abrirModalAlerta('${tarea.id}', '${tarea.nombre.replace(/'/g, "\\'")}')">
+                                Configurar
+                            </button>
+                            <br><small>${estadoAlerta}</small>
+                        </td>
                     `;
                     tbody.appendChild(tr);
-
-                    // Sumar horas al total
-                    totalHoras += tarea.horas_estimadas;
                 });
-
-                // Mostrar total de horas
-                totalHorasDiv.textContent = `${totalHoras.toFixed(2)} horas`;
-                totalHorasContainer.classList.remove('hidden');
 
                 loading.classList.add('hidden');
                 tableContainer.classList.remove('hidden');
+
+                // Iniciar verificación periódica de alertas
+                iniciarVerificacionAlertas();
 
             } catch (error) {
                 mostrarError('Error al cargar las listas: ' + error.message);
@@ -358,6 +513,164 @@
 
         function ocultarError() {
             document.getElementById('error-message').classList.add('hidden');
+        }
+
+        // Funciones para el modal de alertas
+        async function abrirModalAlerta(tareaId, tareaNombre) {
+            const modal = document.getElementById('alerta-modal');
+            const modalTareaId = document.getElementById('modal-tarea-id');
+            const modalTareaNombre = document.getElementById('modal-tarea-nombre');
+            const avisoActivado = document.getElementById('aviso-activado');
+            const emailAviso = document.getElementById('email-aviso');
+            const avisoHoras = document.getElementById('aviso-horas');
+            const avisoMinutos = document.getElementById('aviso-minutos');
+
+            // Establecer el ID y nombre de la tarea
+            modalTareaId.value = tareaId;
+            modalTareaNombre.textContent = tareaNombre;
+
+            // Cargar la configuración actual de la alerta
+            try {
+                const response = await fetch(`/api/alerta/tarea/${tareaId}`);
+                const alerta = await response.json();
+
+                avisoActivado.checked = alerta.aviso_activado || false;
+                emailAviso.value = alerta.email_aviso || '';
+                avisoHoras.value = alerta.aviso_horas || 0;
+                avisoMinutos.value = alerta.aviso_minutos || 0;
+            } catch (error) {
+                console.error('Error al cargar configuración de alerta:', error);
+                // Valores por defecto si hay error
+                avisoActivado.checked = false;
+                emailAviso.value = '';
+                avisoHoras.value = 0;
+                avisoMinutos.value = 0;
+            }
+
+            modal.style.display = 'block';
+        }
+
+        function cerrarModal() {
+            const modal = document.getElementById('alerta-modal');
+            modal.style.display = 'none';
+        }
+
+        // Cerrar modal al hacer clic fuera de él
+        window.onclick = function (event) {
+            const modal = document.getElementById('alerta-modal');
+            if (event.target == modal) {
+                cerrarModal();
+            }
+        }
+
+        // Manejar el envío del formulario de alerta
+        document.getElementById('alerta-form').addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            const tareaId = document.getElementById('modal-tarea-id').value;
+            const avisoActivado = document.getElementById('aviso-activado').checked;
+            const emailAviso = document.getElementById('email-aviso').value;
+            const avisoHoras = parseInt(document.getElementById('aviso-horas').value) || 0;
+            const avisoMinutos = parseInt(document.getElementById('aviso-minutos').value) || 0;
+
+            // Validaciones
+            if (avisoActivado) {
+                if (!emailAviso) {
+                    alert('Por favor, ingresa un email para las notificaciones.');
+                    return;
+                }
+                if (avisoHoras === 0 && avisoMinutos === 0) {
+                    alert('Por favor, ingresa un tiempo de aviso mayor a 0.');
+                    return;
+                }
+            }
+
+            try {
+                const response = await fetch('/api/alerta/tarea/guardar', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        tarea_id: tareaId,
+                        aviso_activado: avisoActivado,
+                        email_aviso: emailAviso,
+                        aviso_horas: avisoHoras,
+                        aviso_minutos: avisoMinutos
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('Alerta guardada correctamente');
+                    cerrarModal();
+                    // Recargar las tareas para mostrar la configuración actualizada
+                    const spaceSelect = document.getElementById('space-select');
+                    if (spaceSelect.value) {
+                        cargarListas(spaceSelect.value);
+                    }
+                } else {
+                    alert('Error al guardar la alerta: ' + (result.error || 'Error desconocido'));
+                }
+            } catch (error) {
+                alert('Error al guardar la alerta: ' + error.message);
+            }
+        });
+
+        // Variable para almacenar el intervalo de verificación
+        let intervaloVerificacion = null;
+
+        // Función para iniciar la verificación periódica de alertas
+        function iniciarVerificacionAlertas() {
+            // Limpiar cualquier intervalo previo
+            if (intervaloVerificacion) {
+                clearInterval(intervaloVerificacion);
+            }
+
+            // Verificar cada 5 minutos (300000 ms)
+            intervaloVerificacion = setInterval(async () => {
+                if (tareasActuales.length > 0) {
+                    try {
+                        const response = await fetch('/api/verificar-alertas', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                tareas: tareasActuales.map(t => ({ id: t.id }))
+                            })
+                        });
+
+                        const result = await response.json();
+
+                        if (result.success && result.alertas_enviadas.length > 0) {
+                            console.log('Alertas enviadas:', result.alertas_enviadas);
+                        }
+                    } catch (error) {
+                        console.error('Error al verificar alertas:', error);
+                    }
+                }
+            }, 300000); // 5 minutos
+
+            // También hacer una verificación inmediata
+            setTimeout(async () => {
+                if (tareasActuales.length > 0) {
+                    try {
+                        const response = await fetch('/api/verificar-alertas', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                tareas: tareasActuales.map(t => ({ id: t.id }))
+                            })
+                        });
+                    } catch (error) {
+                        console.error('Error al verificar alertas:', error);
+                    }
+                }
+            }, 5000); // 5 segundos después de cargar las tareas
         }
     </script>
 </body>
