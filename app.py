@@ -301,6 +301,11 @@ def calcular_tiempo_en_progreso(tarea_id, estado_actual, headers):
 
         tarea_info = tarea_response.json()
 
+        # Obtener estado actual de la tarea
+        estado_actual_lower = tarea_info.get('status', {}).get('status', '').lower()
+        estado_actual_nombre = tarea_info.get('status', {}).get('status', 'Sin estado')
+        print(f"[INFO] Estado actual de tarea {tarea_id}: {estado_actual_nombre}")
+
         # Siempre calcular el tiempo basándose en el historial de cambios de estado a "In Progress"
         history_response = requests.get(
             f'https://api.clickup.com/api/v2/task/{tarea_id}/history',
@@ -323,9 +328,14 @@ def calcular_tiempo_en_progreso(tarea_id, estado_actual, headers):
             print(f"[INFO] Calculando tiempo 'In Progress' desde historial de activity para tarea {tarea_id}")
             print(f"[DEBUG] Procesando {len(history_sorted)} eventos de historial")
 
+            if len(history_sorted) == 0:
+                print(f"[WARNING] No hay eventos en el historial de la tarea {tarea_id}")
+
+            cambios_estado_count = 0
             for item in history_sorted:
                 # Verificar si es un cambio de estado
                 if item.get('field') == 'status':
+                    cambios_estado_count += 1
                     estado_previo = item.get('before', {})
                     nuevo_estado = item.get('after', {})
 
@@ -352,11 +362,9 @@ def calcular_tiempo_en_progreso(tarea_id, estado_actual, headers):
                             print(f"[DEBUG] Tarea {tarea_id} salió de 'in progress' en {fecha_cambio}, tiempo del período: {tiempo_periodo/3600:.2f}h")
                             ultima_entrada_in_progress = None
 
-            # Si actualmente está en "in progress", contar desde la última entrada hasta ahora
-            estado_actual_lower = tarea_info.get('status', {}).get('status', '').lower()
-            estado_actual_nombre = tarea_info.get('status', {}).get('status', 'Sin estado')
-            print(f"[INFO] Estado actual de tarea {tarea_id}: {estado_actual_nombre}")
+            print(f"[DEBUG] Se encontraron {cambios_estado_count} cambios de estado en el historial")
 
+            # Si actualmente está en "in progress", contar desde la última entrada hasta ahora
             if ('progress' in estado_actual_lower or 'doing' in estado_actual_lower or 'in progress' in estado_actual_lower):
                 if ultima_entrada_in_progress is not None:
                     tiempo_periodo = (datetime.now() - ultima_entrada_in_progress).total_seconds()
@@ -365,6 +373,9 @@ def calcular_tiempo_en_progreso(tarea_id, estado_actual, headers):
                     print(f"[DEBUG] Tiempo adicional del período actual: {tiempo_periodo/3600:.2f}h")
 
             print(f"[DEBUG] Tiempo total calculado para tarea {tarea_id}: {tiempo_total_segundos/3600:.2f}h")
+
+            if tiempo_total_segundos == 0:
+                print(f"[WARNING] No se encontraron períodos en estado 'In Progress' para la tarea {tarea_id}")
 
         else:
             print(f"[WARNING] No se pudo obtener historial para tarea {tarea_id}, status code: {history_response.status_code}")
@@ -388,6 +399,7 @@ def calcular_tiempo_en_progreso(tarea_id, estado_actual, headers):
 def obtener_tareas_de_lista(lista_id, headers):
     """Obtiene todas las tareas de una lista con su estado, fechas de comienzo y término"""
     try:
+        print(f"[INFO] Obteniendo tareas de la lista {lista_id}")
         tasks_response = requests.get(
             f'https://api.clickup.com/api/v2/list/{lista_id}/task',
             headers=headers,
@@ -399,6 +411,7 @@ def obtener_tareas_de_lista(lista_id, headers):
 
         if tasks_response.status_code == 200:
             tasks = tasks_response.json()['tasks']
+            print(f"[INFO] Se encontraron {len(tasks)} tareas en la lista {lista_id}")
             for tarea in tasks:
                 # Determinar el estado de la tarea
                 status_type = tarea.get('status', {}).get('status', '').lower()
@@ -417,7 +430,9 @@ def obtener_tareas_de_lista(lista_id, headers):
                 fecha_actualizacion = datetime.fromtimestamp(int(tarea['date_updated']) / 1000).strftime('%Y-%m-%d %H:%M:%S')
 
                 # Calcular tiempo en estado "in progress" usando el historial
+                print(f"[INFO] Calculando tiempo para tarea: {tarea['name']} (ID: {tarea['id']})")
                 horas_trabajadas, minutos_trabajados = calcular_tiempo_en_progreso(tarea['id'], estado, headers)
+                print(f"[INFO] Tiempo calculado para tarea {tarea['id']}: {horas_trabajadas}h {minutos_trabajados}m")
 
                 # Obtener configuración de alerta para esta tarea desde el diccionario en memoria
                 alerta_config = alertas_tareas.get(tarea['id'], {
