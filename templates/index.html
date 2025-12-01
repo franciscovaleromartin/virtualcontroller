@@ -277,6 +277,27 @@
             background-color: #ffecb3 !important;
         }
 
+        .total-horas {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 2px solid #667eea;
+            text-align: center;
+        }
+
+        .total-horas h3 {
+            color: #667eea;
+            font-size: 1.5em;
+            margin-bottom: 10px;
+        }
+
+        .total-horas .valor {
+            font-size: 2em;
+            font-weight: bold;
+            color: #333;
+        }
+
         .tarea-link {
             color: #667eea;
             text-decoration: none;
@@ -338,8 +359,7 @@
                         <tr>
                             <th>Tarea</th>
                             <th>Estado</th>
-                            <th>Comienzo</th>
-                            <th>Término</th>
+                            <th>Tiempo Trabajado</th>
                             <th>Última Actualización</th>
                             <th>Configuración de Alerta</th>
                         </tr>
@@ -347,6 +367,10 @@
                     <tbody id="lists-tbody">
                     </tbody>
                 </table>
+                <div id="total-tiempo-container" class="total-horas hidden">
+                    <h3>Tiempo Total del Trabajo</h3>
+                    <div class="valor" id="total-tiempo">0h 0m</div>
+                </div>
             </div>
         </div>
     </div>
@@ -438,6 +462,8 @@
             const loading = document.getElementById('loading');
             const tableContainer = document.getElementById('table-container');
             const tbody = document.getElementById('lists-tbody');
+            const totalTiempoContainer = document.getElementById('total-tiempo-container');
+            const totalTiempoDiv = document.getElementById('total-tiempo');
 
             loading.classList.remove('hidden');
             tableContainer.classList.add('hidden');
@@ -455,6 +481,9 @@
 
                 tbody.innerHTML = '';
                 tareasActuales = data.tasks;
+
+                let totalHoras = 0;
+                let totalMinutos = 0;
 
                 data.tasks.forEach(tarea => {
                     const tr = document.createElement('tr');
@@ -474,13 +503,15 @@
                         `Activa (${tarea.alerta.aviso_horas}h ${tarea.alerta.aviso_minutos}m)` :
                         'Sin configurar';
 
+                    // Formatear el tiempo trabajado
+                    const tiempoTrabajado = `${tarea.horas_trabajadas}h ${tarea.minutos_trabajados}m`;
+
                     tr.innerHTML = `
                         <td>
                             <a href="${tarea.url}" target="_blank" class="tarea-link">${tarea.nombre}</a>
                         </td>
                         <td><strong>${tarea.estado_texto}</strong></td>
-                        <td>${tarea.fecha_comienzo}</td>
-                        <td>${tarea.fecha_termino}</td>
+                        <td>${tiempoTrabajado}</td>
                         <td>${tarea.fecha_actualizacion}</td>
                         <td>
                             <button class="btn-config" onclick="abrirModalAlerta('${tarea.id}', '${tarea.nombre.replace(/'/g, "\\'")}')">
@@ -490,7 +521,19 @@
                         </td>
                     `;
                     tbody.appendChild(tr);
+
+                    // Sumar al tiempo total
+                    totalHoras += tarea.horas_trabajadas;
+                    totalMinutos += tarea.minutos_trabajados;
                 });
+
+                // Ajustar minutos si superan 60
+                totalHoras += Math.floor(totalMinutos / 60);
+                totalMinutos = totalMinutos % 60;
+
+                // Mostrar tiempo total
+                totalTiempoDiv.textContent = `${totalHoras}h ${totalMinutos}m`;
+                totalTiempoContainer.classList.remove('hidden');
 
                 loading.classList.add('hidden');
                 tableContainer.classList.remove('hidden');

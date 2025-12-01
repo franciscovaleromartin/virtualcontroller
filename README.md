@@ -7,9 +7,9 @@ Sistema de monitoreo y alertas para tareas de ClickUp.
 - **Autenticación OAuth con ClickUp**: Integración segura con tu cuenta de ClickUp
 - **Visualización de Tareas**: Muestra todas las tareas de tus espacios de ClickUp con:
   - Estado actual (completada, en progreso, pendiente)
-  - Fecha de comienzo
-  - Fecha de término
+  - Tiempo trabajado en cada tarea (horas y minutos)
   - Última actualización
+  - Tiempo total del trabajo
 - **Sistema de Alertas Automáticas**: Configura alertas por email para tareas que no han sido actualizadas
 - **Monitoreo en Tiempo Real**: Verificación periódica automática de tareas
 
@@ -107,7 +107,8 @@ virtualcontroller/
 ## Notas Técnicas
 
 - Las configuraciones de alertas se almacenan en memoria durante la ejecución
-- Las fechas de comienzo y término se obtienen directamente de la API de ClickUp
+- El tiempo trabajado se obtiene del campo `time_spent` de la API de ClickUp
+- El sistema suma automáticamente todo el tiempo trabajado en las tareas para mostrar un total
 - El sistema soporta múltiples usuarios simultáneos con sesiones independientes
 - La verificación de alertas se realiza desde el frontend usando el token del usuario activo
 

@@ -219,17 +219,16 @@ def obtener_tareas_de_lista(lista_id, headers):
                 # Fecha de última actualización
                 fecha_actualizacion = datetime.fromtimestamp(int(tarea['date_updated']) / 1000).strftime('%Y-%m-%d %H:%M:%S')
 
-                # Fecha de comienzo (start_date)
-                fecha_comienzo = 'N/A'
-                if tarea.get('start_date'):
-                    fecha_comienzo = datetime.fromtimestamp(int(tarea['start_date']) / 1000).strftime('%Y-%m-%d %H:%M:%S')
-
-                # Fecha de término (date_closed o date_done si está completada)
-                fecha_termino = 'N/A'
-                if tarea.get('date_closed'):
-                    fecha_termino = datetime.fromtimestamp(int(tarea['date_closed']) / 1000).strftime('%Y-%m-%d %H:%M:%S')
-                elif tarea.get('date_done'):
-                    fecha_termino = datetime.fromtimestamp(int(tarea['date_done']) / 1000).strftime('%Y-%m-%d %H:%M:%S')
+                # Obtener tiempo trabajado (time tracked) en milisegundos
+                time_spent = tarea.get('time_spent', 0)
+                # Convertir a horas y minutos
+                if time_spent > 0:
+                    total_minutos = time_spent // 60000  # Convertir de ms a minutos
+                    horas_trabajadas = total_minutos // 60
+                    minutos_trabajados = total_minutos % 60
+                else:
+                    horas_trabajadas = 0
+                    minutos_trabajados = 0
 
                 # Obtener configuración de alerta para esta tarea desde el diccionario en memoria
                 alerta_config = alertas_tareas.get(tarea['id'], {
@@ -246,8 +245,8 @@ def obtener_tareas_de_lista(lista_id, headers):
                     'estado_texto': tarea.get('status', {}).get('status', 'Sin estado'),
                     'url': tarea['url'],
                     'fecha_actualizacion': fecha_actualizacion,
-                    'fecha_comienzo': fecha_comienzo,
-                    'fecha_termino': fecha_termino,
+                    'horas_trabajadas': int(horas_trabajadas),
+                    'minutos_trabajados': int(minutos_trabajados),
                     'alerta': alerta_config
                 })
 
