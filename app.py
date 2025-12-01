@@ -301,17 +301,7 @@ def calcular_tiempo_en_progreso(tarea_id, estado_actual, headers):
 
         tarea_info = tarea_response.json()
 
-        # Primero intentar usar time_spent de ClickUp (tiempo rastreado)
-        time_spent = tarea_info.get('time_spent', 0)
-        if time_spent > 0:
-            # time_spent está en milisegundos
-            total_segundos = time_spent / 1000
-            horas = int(total_segundos // 3600)
-            minutos = int((total_segundos % 3600) // 60)
-            print(f"[INFO] Usando time_spent para tarea {tarea_id}: {horas}h {minutos}m")
-            return horas, minutos
-
-        # Si no hay time_spent, intentar usar el historial
+        # Siempre calcular el tiempo basándose en el historial de cambios de estado a "In Progress"
         history_response = requests.get(
             f'https://api.clickup.com/api/v2/task/{tarea_id}/history',
             headers=headers,
@@ -330,7 +320,8 @@ def calcular_tiempo_en_progreso(tarea_id, estado_actual, headers):
             # Variables para rastrear períodos en "in progress"
             ultima_entrada_in_progress = None
 
-            print(f"[DEBUG] Procesando {len(history_sorted)} eventos de historial para tarea {tarea_id}")
+            print(f"[INFO] Calculando tiempo 'In Progress' desde historial de activity para tarea {tarea_id}")
+            print(f"[DEBUG] Procesando {len(history_sorted)} eventos de historial")
 
             for item in history_sorted:
                 # Verificar si es un cambio de estado
@@ -363,11 +354,15 @@ def calcular_tiempo_en_progreso(tarea_id, estado_actual, headers):
 
             # Si actualmente está en "in progress", contar desde la última entrada hasta ahora
             estado_actual_lower = tarea_info.get('status', {}).get('status', '').lower()
+            estado_actual_nombre = tarea_info.get('status', {}).get('status', 'Sin estado')
+            print(f"[INFO] Estado actual de tarea {tarea_id}: {estado_actual_nombre}")
+
             if ('progress' in estado_actual_lower or 'doing' in estado_actual_lower or 'in progress' in estado_actual_lower):
                 if ultima_entrada_in_progress is not None:
                     tiempo_periodo = (datetime.now() - ultima_entrada_in_progress).total_seconds()
                     tiempo_total_segundos += tiempo_periodo
-                    print(f"[DEBUG] Tarea {tarea_id} actualmente en 'in progress', tiempo adicional: {tiempo_periodo/3600:.2f}h")
+                    print(f"[INFO] Tarea actualmente en 'In Progress' desde {ultima_entrada_in_progress.strftime('%Y-%m-%d %H:%M:%S')}")
+                    print(f"[DEBUG] Tiempo adicional del período actual: {tiempo_periodo/3600:.2f}h")
 
             print(f"[DEBUG] Tiempo total calculado para tarea {tarea_id}: {tiempo_total_segundos/3600:.2f}h")
 
@@ -379,6 +374,8 @@ def calcular_tiempo_en_progreso(tarea_id, estado_actual, headers):
         # Convertir a horas y minutos
         horas = int(tiempo_total_segundos // 3600)
         minutos = int((tiempo_total_segundos % 3600) // 60)
+
+        print(f"[INFO] Tiempo total 'In Progress' calculado desde activity: {horas}h {minutos}m (Estado actual: {estado_actual_nombre})")
 
         return horas, minutos
 
