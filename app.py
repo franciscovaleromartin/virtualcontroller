@@ -19,41 +19,56 @@ alertas_config = {}
 @app.route('/')
 def inicio():
     code = request.args.get('code')
-    
+
+    print(f"[DEBUG] Ruta '/' accedida. Code presente: {bool(code)}")
+
     if code:
+        print(f"[DEBUG] Procesando OAuth callback...")
         return handle_oauth_callback(code)
-    
+
     if 'access_token' not in session:
+        print(f"[DEBUG] No hay access_token, redirigiendo a login")
         return redirect(url_for('login'))
-    
+
+    print(f"[DEBUG] Usuario autenticado, mostrando página principal")
     return render_template('index.html')
 
 def handle_oauth_callback(code):
+    print(f"[DEBUG] OAuth callback recibido con código: {code[:10]}...")
     token_url = "https://api.clickup.com/api/v2/oauth/token"
-    
+
     payload = {
         'client_id': CLICKUP_CLIENT_ID,
         'client_secret': CLICKUP_CLIENT_SECRET,
         'code': code
     }
-    
+
+    print(f"[DEBUG] Enviando request a ClickUp para obtener token...")
+
     try:
         response = requests.post(token_url, data=payload)
-        
+
+        print(f"[DEBUG] Respuesta de ClickUp: Status {response.status_code}")
+
         if response.status_code != 200:
+            print(f"[ERROR] Error al obtener token: {response.text}")
             return f"Error al obtener token (Status {response.status_code}): {response.text}", 400
-        
+
         token_data = response.json()
         session['access_token'] = token_data['access_token']
-        
+
+        print(f"[DEBUG] Token obtenido y guardado en sesión correctamente")
+
         return redirect('/')
-    
+
     except Exception as e:
+        print(f"[ERROR] Excepción en OAuth callback: {str(e)}")
         return f"Error: {str(e)}", 500
 
 @app.route('/login')
 def login():
     auth_url = f"https://app.clickup.com/api?client_id={CLICKUP_CLIENT_ID}&redirect_uri={REDIRECT_URI}"
+    print(f"[DEBUG] Redirigiendo a ClickUp OAuth: {auth_url}")
     return redirect(auth_url)
 
 @app.route('/logout')
@@ -77,8 +92,8 @@ def get_spaces():
         if not headers:
             return jsonify({'error': 'No autenticado', 'redirect': '/login'}), 401
         
-        teams_response = requests.get('https://api.clickup.com/api/v2/team', headers=headers)
-        
+        teams_response = requests.get('https://api.clickup.com/api/v2/team', headers=headers, timeout=10)
+
         if teams_response.status_code == 401:
             session.clear()
             return jsonify({'error': 'Sesión expirada', 'redirect': '/login'}), 401
@@ -96,7 +111,8 @@ def get_spaces():
         for team in teams:
             spaces_response = requests.get(
                 f'https://api.clickup.com/api/v2/team/{team["id"]}/space',
-                headers=headers
+                headers=headers,
+                timeout=10
             )
             if spaces_response.status_code == 200:
                 spaces = spaces_response.json()['spaces']
@@ -121,12 +137,14 @@ def get_lists(space_id):
 
         folders_response = requests.get(
             f'https://api.clickup.com/api/v2/space/{space_id}/folder',
-            headers=headers
+            headers=headers,
+            timeout=10
         )
 
         lists_response = requests.get(
             f'https://api.clickup.com/api/v2/space/{space_id}/list',
-            headers=headers
+            headers=headers,
+            timeout=10
         )
 
         todas_tareas = []
@@ -142,7 +160,8 @@ def get_lists(space_id):
             for folder in folders:
                 folder_lists = requests.get(
                     f'https://api.clickup.com/api/v2/folder/{folder["id"]}/list',
-                    headers=headers
+                    headers=headers,
+                    timeout=10
                 )
                 if folder_lists.status_code == 200:
                     for lista in folder_lists.json()['lists']:
@@ -156,49 +175,58 @@ def get_lists(space_id):
 
 def obtener_tareas_de_lista(lista_id, headers):
     """Obtiene todas las tareas de una lista con su estado y tiempo estimado"""
-    tasks_response = requests.get(
-        f'https://api.clickup.com/api/v2/list/{lista_id}/task',
-        headers=headers,
-        params={'include_closed': 'true'}
-    )
+    try:
+        tasks_response = requests.get(
+            f'https://api.clickup.com/api/v2/list/{lista_id}/task',
+            headers=headers,
+            params={'include_closed': 'true'},
+            timeout=10
+        )
 
-    tareas_procesadas = []
+        tareas_procesadas = []
 
-    if tasks_response.status_code == 200:
-        tasks = tasks_response.json()['tasks']
-        for tarea in tasks:
-            # Determinar el estado de la tarea
-            status_type = tarea.get('status', {}).get('status', '').lower()
-            estado = 'pendiente'
+        if tasks_response.status_code == 200:
+            tasks = tasks_response.json()['tasks']
+            for tarea in tasks:
+                # Determinar el estado de la tarea
+                status_type = tarea.get('status', {}).get('status', '').lower()
+                estado = 'pendiente'
 
-            # Los estados pueden variar, pero generalmente:
-            # - 'complete', 'closed' = completada
-            # - 'in progress', 'in review' = en progreso
-            # - todo lo demás = pendiente
-            if status_type in ['complete', 'closed', 'completed']:
-                estado = 'completada'
-            elif 'progress' in status_type or 'review' in status_type or 'doing' in status_type:
-                estado = 'en_progreso'
+                # Los estados pueden variar, pero generalmente:
+                # - 'complete', 'closed' = completada
+                # - 'in progress', 'in review' = en progreso
+                # - todo lo demás = pendiente
+                if status_type in ['complete', 'closed', 'completed']:
+                    estado = 'completada'
+                elif 'progress' in status_type or 'review' in status_type or 'doing' in status_type:
+                    estado = 'en_progreso'
 
-            # Obtener tiempo estimado (en milisegundos)
-            time_estimate = tarea.get('time_estimate', 0)
-            # Convertir a horas (milisegundos / 1000 / 60 / 60)
-            horas_estimadas = time_estimate / 3600000 if time_estimate else 0
+                # Obtener tiempo estimado (en milisegundos)
+                time_estimate = tarea.get('time_estimate', 0)
+                # Convertir a horas (milisegundos / 1000 / 60 / 60)
+                horas_estimadas = time_estimate / 3600000 if time_estimate else 0
 
-            # Fecha de última actualización
-            fecha_actualizacion = datetime.fromtimestamp(int(tarea['date_updated']) / 1000).strftime('%Y-%m-%d %H:%M:%S')
+                # Fecha de última actualización
+                fecha_actualizacion = datetime.fromtimestamp(int(tarea['date_updated']) / 1000).strftime('%Y-%m-%d %H:%M:%S')
 
-            tareas_procesadas.append({
-                'id': tarea['id'],
-                'nombre': tarea['name'],
-                'estado': estado,
-                'estado_texto': tarea.get('status', {}).get('status', 'Sin estado'),
-                'url': tarea['url'],
-                'fecha_actualizacion': fecha_actualizacion,
-                'horas_estimadas': round(horas_estimadas, 2)
-            })
+                tareas_procesadas.append({
+                    'id': tarea['id'],
+                    'nombre': tarea['name'],
+                    'estado': estado,
+                    'estado_texto': tarea.get('status', {}).get('status', 'Sin estado'),
+                    'url': tarea['url'],
+                    'fecha_actualizacion': fecha_actualizacion,
+                    'horas_estimadas': round(horas_estimadas, 2)
+                })
 
-    return tareas_procesadas
+        return tareas_procesadas
+
+    except requests.exceptions.RequestException as e:
+        print(f"[ERROR] Error al obtener tareas de la lista {lista_id}: {str(e)}")
+        return []
+    except Exception as e:
+        print(f"[ERROR] Error inesperado en obtener_tareas_de_lista: {str(e)}")
+        return []
 
 def procesar_lista(lista, headers):
     lista_id = lista['id']
@@ -207,7 +235,8 @@ def procesar_lista(lista, headers):
     tasks_response = requests.get(
         f'https://api.clickup.com/api/v2/list/{lista_id}/task',
         headers=headers,
-        params={'order_by': 'updated', 'reverse': 'true', 'page': 0}
+        params={'order_by': 'updated', 'reverse': 'true', 'page': 0},
+        timeout=10
     )
 
     ultima_actualizacion = None
