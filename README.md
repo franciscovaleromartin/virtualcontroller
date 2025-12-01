@@ -108,9 +108,9 @@ virtualcontroller/
 
 - Las configuraciones de alertas se almacenan en memoria durante la ejecución
 - El tiempo trabajado se calcula según el estado de la tarea:
-  - **Tareas en progreso**: tiempo desde creación hasta ahora (se actualiza en tiempo real)
-  - **Tareas completadas**: tiempo desde creación hasta fecha de cierre
-  - **Tareas pendientes (To Do)**: 0 horas
+  - **Tareas en "To Do"**: tiempo total desde creación hasta ahora (se actualiza en tiempo real)
+  - **Tareas "Complete"**: tiempo total desde creación hasta fecha de cierre (reloj detenido)
+  - Si una tarea vuelve de "Complete" a "To Do", continúa sumando tiempo desde donde estaba
 - El sistema suma automáticamente todo el tiempo trabajado en las tareas para mostrar un total
 - El sistema soporta múltiples usuarios simultáneos con sesiones independientes
 - La verificación de alertas se realiza desde el frontend usando el token del usuario activo

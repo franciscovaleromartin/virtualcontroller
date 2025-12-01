@@ -188,6 +188,57 @@ def get_lists(space_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+def calcular_tiempo_en_todo(tarea_id, estado_actual, headers):
+    """Calcula el tiempo total que una tarea ha estado en estado 'to do' usando el historial"""
+    try:
+        # Obtener historial de la tarea
+        history_response = requests.get(
+            f'https://api.clickup.com/api/v2/task/{tarea_id}',
+            headers=headers,
+            timeout=10
+        )
+
+        if history_response.status_code != 200:
+            print(f"[WARNING] No se pudo obtener historial de tarea {tarea_id}")
+            return 0, 0
+
+        tarea_completa = history_response.json()
+
+        # Obtener fecha de creación (cuando se puso en to do por primera vez)
+        fecha_creacion = datetime.fromtimestamp(int(tarea_completa['date_created']) / 1000)
+
+        # Obtener el estado actual
+        status_type = tarea_completa.get('status', {}).get('status', '').lower()
+
+        # Determinar si está completada
+        esta_completada = status_type in ['complete', 'closed', 'completed']
+
+        if esta_completada:
+            # Si está completada, calcular tiempo desde creación hasta fecha de cierre
+            if tarea_completa.get('date_closed'):
+                fecha_cierre = datetime.fromtimestamp(int(tarea_completa['date_closed']) / 1000)
+            elif tarea_completa.get('date_done'):
+                fecha_cierre = datetime.fromtimestamp(int(tarea_completa['date_done']) / 1000)
+            else:
+                # Si no tiene fecha de cierre pero está marcada como completada, usar última actualización
+                fecha_cierre = datetime.fromtimestamp(int(tarea_completa['date_updated']) / 1000)
+
+            tiempo_total = fecha_cierre - fecha_creacion
+        else:
+            # Si está en to do (o cualquier estado no completado), calcular desde creación hasta ahora
+            tiempo_total = datetime.now() - fecha_creacion
+
+        # Convertir a horas y minutos
+        total_segundos = int(tiempo_total.total_seconds())
+        horas = total_segundos // 3600
+        minutos = (total_segundos % 3600) // 60
+
+        return int(horas), int(minutos)
+
+    except Exception as e:
+        print(f"[ERROR] Error al calcular tiempo en to do para tarea {tarea_id}: {str(e)}")
+        return 0, 0
+
 def obtener_tareas_de_lista(lista_id, headers):
     """Obtiene todas las tareas de una lista con su estado, fechas de comienzo y término"""
     try:
@@ -219,29 +270,8 @@ def obtener_tareas_de_lista(lista_id, headers):
                 # Fecha de última actualización
                 fecha_actualizacion = datetime.fromtimestamp(int(tarea['date_updated']) / 1000).strftime('%Y-%m-%d %H:%M:%S')
 
-                # Calcular tiempo trabajado según el estado de la tarea
-                fecha_creacion = datetime.fromtimestamp(int(tarea['date_created']) / 1000)
-
-                if estado == 'completada':
-                    # Para tareas completadas: tiempo desde creación hasta cierre
-                    if tarea.get('date_closed'):
-                        fecha_fin = datetime.fromtimestamp(int(tarea['date_closed']) / 1000)
-                    elif tarea.get('date_done'):
-                        fecha_fin = datetime.fromtimestamp(int(tarea['date_done']) / 1000)
-                    else:
-                        fecha_fin = datetime.now()
-                    tiempo_total = fecha_fin - fecha_creacion
-                elif estado == 'en_progreso':
-                    # Para tareas en progreso: tiempo desde creación hasta ahora
-                    tiempo_total = datetime.now() - fecha_creacion
-                else:
-                    # Para tareas pendientes/to do: 0
-                    tiempo_total = timedelta(0)
-
-                # Convertir a horas y minutos
-                total_segundos = int(tiempo_total.total_seconds())
-                horas_trabajadas = total_segundos // 3600
-                minutos_trabajados = (total_segundos % 3600) // 60
+                # Calcular tiempo en estado "to do" usando el historial
+                horas_trabajadas, minutos_trabajados = calcular_tiempo_en_todo(tarea['id'], estado, headers)
 
                 # Obtener configuración de alerta para esta tarea desde el diccionario en memoria
                 alerta_config = alertas_tareas.get(tarea['id'], {
