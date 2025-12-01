@@ -118,25 +118,25 @@ def get_lists(space_id):
         headers = get_headers()
         if not headers:
             return jsonify({'error': 'No autenticado', 'redirect': '/login'}), 401
-        
+
         folders_response = requests.get(
             f'https://api.clickup.com/api/v2/space/{space_id}/folder',
             headers=headers
         )
-        
+
         lists_response = requests.get(
             f'https://api.clickup.com/api/v2/space/{space_id}/list',
             headers=headers
         )
-        
-        todas_listas = []
-        
+
+        todas_tareas = []
+
         if lists_response.status_code == 200:
             listas = lists_response.json()['lists']
             for lista in listas:
-                info_lista = procesar_lista(lista, headers)
-                todas_listas.append(info_lista)
-        
+                tareas = obtener_tareas_de_lista(lista['id'], headers)
+                todas_tareas.extend(tareas)
+
         if folders_response.status_code == 200:
             folders = folders_response.json()['folders']
             for folder in folders:
@@ -146,29 +146,75 @@ def get_lists(space_id):
                 )
                 if folder_lists.status_code == 200:
                     for lista in folder_lists.json()['lists']:
-                        info_lista = procesar_lista(lista, headers)
-                        todas_listas.append(info_lista)
-        
-        return jsonify({'lists': todas_listas})
-    
+                        tareas = obtener_tareas_de_lista(lista['id'], headers)
+                        todas_tareas.extend(tareas)
+
+        return jsonify({'tasks': todas_tareas})
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+def obtener_tareas_de_lista(lista_id, headers):
+    """Obtiene todas las tareas de una lista con su estado y tiempo estimado"""
+    tasks_response = requests.get(
+        f'https://api.clickup.com/api/v2/list/{lista_id}/task',
+        headers=headers,
+        params={'include_closed': 'true'}
+    )
+
+    tareas_procesadas = []
+
+    if tasks_response.status_code == 200:
+        tasks = tasks_response.json()['tasks']
+        for tarea in tasks:
+            # Determinar el estado de la tarea
+            status_type = tarea.get('status', {}).get('status', '').lower()
+            estado = 'pendiente'
+
+            # Los estados pueden variar, pero generalmente:
+            # - 'complete', 'closed' = completada
+            # - 'in progress', 'in review' = en progreso
+            # - todo lo demás = pendiente
+            if status_type in ['complete', 'closed', 'completed']:
+                estado = 'completada'
+            elif 'progress' in status_type or 'review' in status_type or 'doing' in status_type:
+                estado = 'en_progreso'
+
+            # Obtener tiempo estimado (en milisegundos)
+            time_estimate = tarea.get('time_estimate', 0)
+            # Convertir a horas (milisegundos / 1000 / 60 / 60)
+            horas_estimadas = time_estimate / 3600000 if time_estimate else 0
+
+            # Fecha de última actualización
+            fecha_actualizacion = datetime.fromtimestamp(int(tarea['date_updated']) / 1000).strftime('%Y-%m-%d %H:%M:%S')
+
+            tareas_procesadas.append({
+                'id': tarea['id'],
+                'nombre': tarea['name'],
+                'estado': estado,
+                'estado_texto': tarea.get('status', {}).get('status', 'Sin estado'),
+                'url': tarea['url'],
+                'fecha_actualizacion': fecha_actualizacion,
+                'horas_estimadas': round(horas_estimadas, 2)
+            })
+
+    return tareas_procesadas
 
 def procesar_lista(lista, headers):
     lista_id = lista['id']
     lista_nombre = lista['name']
-    
+
     tasks_response = requests.get(
         f'https://api.clickup.com/api/v2/list/{lista_id}/task',
         headers=headers,
         params={'order_by': 'updated', 'reverse': 'true', 'page': 0}
     )
-    
+
     ultima_actualizacion = None
     titulo_ultima_tarea = "Sin tareas"
     enlace_tarea = ""
     tarea_id = ""
-    
+
     if tasks_response.status_code == 200:
         tasks = tasks_response.json()['tasks']
         if tasks:
@@ -177,14 +223,14 @@ def procesar_lista(lista, headers):
             titulo_ultima_tarea = tarea['name']
             tarea_id = tarea['id']
             enlace_tarea = tarea['url']
-    
+
     alerta_config = alertas_config.get(lista_id, {
         'activa': False,
         'email': '',
         'horas': 0,
         'minutos': 0
     })
-    
+
     return {
         'id': lista_id,
         'nombre': lista_nombre,
