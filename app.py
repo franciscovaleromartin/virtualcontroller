@@ -301,7 +301,17 @@ def calcular_tiempo_en_progreso(tarea_id, estado_actual, headers):
 
         tarea_info = tarea_response.json()
 
-        # Obtener el historial de la tarea (cambios de estado)
+        # Primero intentar usar time_spent de ClickUp (tiempo rastreado)
+        time_spent = tarea_info.get('time_spent', 0)
+        if time_spent > 0:
+            # time_spent está en milisegundos
+            total_segundos = time_spent / 1000
+            horas = int(total_segundos // 3600)
+            minutos = int((total_segundos % 3600) // 60)
+            print(f"[INFO] Usando time_spent para tarea {tarea_id}: {horas}h {minutos}m")
+            return horas, minutos
+
+        # Si no hay time_spent, intentar usar el historial
         history_response = requests.get(
             f'https://api.clickup.com/api/v2/task/{tarea_id}/history',
             headers=headers,
@@ -320,39 +330,51 @@ def calcular_tiempo_en_progreso(tarea_id, estado_actual, headers):
             # Variables para rastrear períodos en "in progress"
             ultima_entrada_in_progress = None
 
+            print(f"[DEBUG] Procesando {len(history_sorted)} eventos de historial para tarea {tarea_id}")
+
             for item in history_sorted:
                 # Verificar si es un cambio de estado
                 if item.get('field') == 'status':
-                    nuevo_estado = item.get('after', {}).get('status', '').lower()
+                    estado_previo = item.get('before', {})
+                    nuevo_estado = item.get('after', {})
+
+                    estado_previo_nombre = estado_previo.get('status', '') if isinstance(estado_previo, dict) else str(estado_previo)
+                    nuevo_estado_nombre = nuevo_estado.get('status', '') if isinstance(nuevo_estado, dict) else str(nuevo_estado)
+
+                    estado_previo_lower = estado_previo_nombre.lower()
+                    nuevo_estado_lower = nuevo_estado_nombre.lower()
+
                     fecha_cambio = datetime.fromtimestamp(int(item.get('date', 0)) / 1000)
 
                     # Si entró en "in progress"
-                    if 'progress' in nuevo_estado or 'doing' in nuevo_estado:
-                        ultima_entrada_in_progress = fecha_cambio
+                    if ('progress' in nuevo_estado_lower or 'doing' in nuevo_estado_lower or 'in progress' in nuevo_estado_lower):
+                        if ultima_entrada_in_progress is None:
+                            ultima_entrada_in_progress = fecha_cambio
+                            print(f"[DEBUG] Tarea {tarea_id} entró en 'in progress' en {fecha_cambio}")
 
-                    # Si salió de "in progress" (a cualquier otro estado)
-                    elif ultima_entrada_in_progress is not None:
-                        # Calcular el tiempo que estuvo en "in progress"
-                        tiempo_periodo = (fecha_cambio - ultima_entrada_in_progress).total_seconds()
-                        tiempo_total_segundos += tiempo_periodo
-                        ultima_entrada_in_progress = None
+                    # Si salió de "in progress" (y estaba en in progress antes)
+                    elif ('progress' in estado_previo_lower or 'doing' in estado_previo_lower or 'in progress' in estado_previo_lower):
+                        if ultima_entrada_in_progress is not None:
+                            # Calcular el tiempo que estuvo en "in progress"
+                            tiempo_periodo = (fecha_cambio - ultima_entrada_in_progress).total_seconds()
+                            tiempo_total_segundos += tiempo_periodo
+                            print(f"[DEBUG] Tarea {tarea_id} salió de 'in progress' en {fecha_cambio}, tiempo del período: {tiempo_periodo/3600:.2f}h")
+                            ultima_entrada_in_progress = None
 
             # Si actualmente está en "in progress", contar desde la última entrada hasta ahora
             estado_actual_lower = tarea_info.get('status', {}).get('status', '').lower()
-            if ('progress' in estado_actual_lower or 'doing' in estado_actual_lower) and ultima_entrada_in_progress is not None:
-                tiempo_periodo = (datetime.now() - ultima_entrada_in_progress).total_seconds()
-                tiempo_total_segundos += tiempo_periodo
+            if ('progress' in estado_actual_lower or 'doing' in estado_actual_lower or 'in progress' in estado_actual_lower):
+                if ultima_entrada_in_progress is not None:
+                    tiempo_periodo = (datetime.now() - ultima_entrada_in_progress).total_seconds()
+                    tiempo_total_segundos += tiempo_periodo
+                    print(f"[DEBUG] Tarea {tarea_id} actualmente en 'in progress', tiempo adicional: {tiempo_periodo/3600:.2f}h")
+
+            print(f"[DEBUG] Tiempo total calculado para tarea {tarea_id}: {tiempo_total_segundos/3600:.2f}h")
 
         else:
-            # Si no hay historial disponible o hay error, usar método alternativo
-            # Verificar si actualmente está en "in progress"
-            estado_actual_lower = tarea_info.get('status', {}).get('status', '').lower()
-            if 'progress' in estado_actual_lower or 'doing' in estado_actual_lower:
-                # Usar fecha de última actualización como aproximación
-                fecha_actualizacion = datetime.fromtimestamp(int(tarea_info['date_updated']) / 1000)
-                fecha_creacion = datetime.fromtimestamp(int(tarea_info['date_created']) / 1000)
-                # Asumir que ha estado en progreso desde la última actualización
-                tiempo_total_segundos = (datetime.now() - fecha_actualizacion).total_seconds()
+            print(f"[WARNING] No se pudo obtener historial para tarea {tarea_id}, status code: {history_response.status_code}")
+            # Si no hay historial, retornar 0
+            return 0, 0
 
         # Convertir a horas y minutos
         horas = int(tiempo_total_segundos // 3600)
@@ -362,6 +384,8 @@ def calcular_tiempo_en_progreso(tarea_id, estado_actual, headers):
 
     except Exception as e:
         print(f"[ERROR] Error al calcular tiempo en progreso para tarea {tarea_id}: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return 0, 0
 
 def obtener_tareas_de_lista(lista_id, headers):
