@@ -285,55 +285,83 @@ def get_lists(space_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-def calcular_tiempo_en_todo(tarea_id, estado_actual, headers):
-    """Calcula el tiempo total que una tarea ha estado en estado 'to do' usando el historial"""
+def calcular_tiempo_en_progreso(tarea_id, estado_actual, headers):
+    """Calcula el tiempo total que una tarea ha estado en estado 'in progress' usando el historial de cambios"""
     try:
-        # Obtener historial de la tarea
-        history_response = requests.get(
+        # Obtener información completa de la tarea
+        tarea_response = requests.get(
             f'https://api.clickup.com/api/v2/task/{tarea_id}',
             headers=headers,
             timeout=10
         )
 
-        if history_response.status_code != 200:
-            print(f"[WARNING] No se pudo obtener historial de tarea {tarea_id}")
+        if tarea_response.status_code != 200:
+            print(f"[WARNING] No se pudo obtener información de tarea {tarea_id}")
             return 0, 0
 
-        tarea_completa = history_response.json()
+        tarea_info = tarea_response.json()
 
-        # Obtener fecha de creación (cuando se puso en to do por primera vez)
-        fecha_creacion = datetime.fromtimestamp(int(tarea_completa['date_created']) / 1000)
+        # Obtener el historial de la tarea (cambios de estado)
+        history_response = requests.get(
+            f'https://api.clickup.com/api/v2/task/{tarea_id}/history',
+            headers=headers,
+            params={'page': 0},
+            timeout=10
+        )
 
-        # Obtener el estado actual
-        status_type = tarea_completa.get('status', {}).get('status', '').lower()
+        tiempo_total_segundos = 0
 
-        # Determinar si está completada
-        esta_completada = status_type in ['complete', 'closed', 'completed']
+        if history_response.status_code == 200:
+            history = history_response.json().get('history', [])
 
-        if esta_completada:
-            # Si está completada, calcular tiempo desde creación hasta fecha de cierre
-            if tarea_completa.get('date_closed'):
-                fecha_cierre = datetime.fromtimestamp(int(tarea_completa['date_closed']) / 1000)
-            elif tarea_completa.get('date_done'):
-                fecha_cierre = datetime.fromtimestamp(int(tarea_completa['date_done']) / 1000)
-            else:
-                # Si no tiene fecha de cierre pero está marcada como completada, usar última actualización
-                fecha_cierre = datetime.fromtimestamp(int(tarea_completa['date_updated']) / 1000)
+            # Ordenar el historial por fecha (más antiguo primero)
+            history_sorted = sorted(history, key=lambda x: x.get('date', 0))
 
-            tiempo_total = fecha_cierre - fecha_creacion
+            # Variables para rastrear períodos en "in progress"
+            ultima_entrada_in_progress = None
+
+            for item in history_sorted:
+                # Verificar si es un cambio de estado
+                if item.get('field') == 'status':
+                    nuevo_estado = item.get('after', {}).get('status', '').lower()
+                    fecha_cambio = datetime.fromtimestamp(int(item.get('date', 0)) / 1000)
+
+                    # Si entró en "in progress"
+                    if 'progress' in nuevo_estado or 'doing' in nuevo_estado:
+                        ultima_entrada_in_progress = fecha_cambio
+
+                    # Si salió de "in progress" (a cualquier otro estado)
+                    elif ultima_entrada_in_progress is not None:
+                        # Calcular el tiempo que estuvo en "in progress"
+                        tiempo_periodo = (fecha_cambio - ultima_entrada_in_progress).total_seconds()
+                        tiempo_total_segundos += tiempo_periodo
+                        ultima_entrada_in_progress = None
+
+            # Si actualmente está en "in progress", contar desde la última entrada hasta ahora
+            estado_actual_lower = tarea_info.get('status', {}).get('status', '').lower()
+            if ('progress' in estado_actual_lower or 'doing' in estado_actual_lower) and ultima_entrada_in_progress is not None:
+                tiempo_periodo = (datetime.now() - ultima_entrada_in_progress).total_seconds()
+                tiempo_total_segundos += tiempo_periodo
+
         else:
-            # Si está en to do (o cualquier estado no completado), calcular desde creación hasta ahora
-            tiempo_total = datetime.now() - fecha_creacion
+            # Si no hay historial disponible o hay error, usar método alternativo
+            # Verificar si actualmente está en "in progress"
+            estado_actual_lower = tarea_info.get('status', {}).get('status', '').lower()
+            if 'progress' in estado_actual_lower or 'doing' in estado_actual_lower:
+                # Usar fecha de última actualización como aproximación
+                fecha_actualizacion = datetime.fromtimestamp(int(tarea_info['date_updated']) / 1000)
+                fecha_creacion = datetime.fromtimestamp(int(tarea_info['date_created']) / 1000)
+                # Asumir que ha estado en progreso desde la última actualización
+                tiempo_total_segundos = (datetime.now() - fecha_actualizacion).total_seconds()
 
         # Convertir a horas y minutos
-        total_segundos = int(tiempo_total.total_seconds())
-        horas = total_segundos // 3600
-        minutos = (total_segundos % 3600) // 60
+        horas = int(tiempo_total_segundos // 3600)
+        minutos = int((tiempo_total_segundos % 3600) // 60)
 
-        return int(horas), int(minutos)
+        return horas, minutos
 
     except Exception as e:
-        print(f"[ERROR] Error al calcular tiempo en to do para tarea {tarea_id}: {str(e)}")
+        print(f"[ERROR] Error al calcular tiempo en progreso para tarea {tarea_id}: {str(e)}")
         return 0, 0
 
 def obtener_tareas_de_lista(lista_id, headers):
@@ -367,8 +395,8 @@ def obtener_tareas_de_lista(lista_id, headers):
                 # Fecha de última actualización
                 fecha_actualizacion = datetime.fromtimestamp(int(tarea['date_updated']) / 1000).strftime('%Y-%m-%d %H:%M:%S')
 
-                # Calcular tiempo en estado "to do" usando el historial
-                horas_trabajadas, minutos_trabajados = calcular_tiempo_en_todo(tarea['id'], estado, headers)
+                # Calcular tiempo en estado "in progress" usando el historial
+                horas_trabajadas, minutos_trabajados = calcular_tiempo_en_progreso(tarea['id'], estado, headers)
 
                 # Obtener configuración de alerta para esta tarea desde el diccionario en memoria
                 alerta_config = alertas_tareas.get(tarea['id'], {
