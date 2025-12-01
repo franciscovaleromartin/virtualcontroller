@@ -366,10 +366,23 @@ def calcular_tiempo_en_progreso(tarea_id, estado_actual, headers):
 
         else:
             print(f"[WARNING] No se pudo obtener time_in_status para tarea {tarea_id}, status code: {time_in_status_response.status_code}")
-            if time_in_status_response.status_code == 404:
-                print(f"[ERROR] La ClickApp 'Total time in Status' NO está habilitada en tu Workspace")
-                print(f"[INFO] Para habilitarla: Settings > ClickApps > Busca 'Time in Status' > Activar")
-            return 0, 0
+            if time_in_status_response.status_code == 403:
+                print(f"[WARNING] La ClickApp 'Time in Status' requiere plan Business o superior")
+                print(f"[INFO] Usando tiempo rastreado manualmente (time_spent) como alternativa")
+            elif time_in_status_response.status_code == 404:
+                print(f"[WARNING] La ClickApp 'Total time in Status' NO está habilitada")
+                print(f"[INFO] Usando tiempo rastreado manualmente (time_spent) como alternativa")
+
+            # Fallback: usar time_spent (tiempo rastreado manualmente por usuarios)
+            time_spent = tarea_info.get('time_spent', 0)
+            if time_spent > 0:
+                # time_spent está en milisegundos
+                tiempo_total_segundos = time_spent / 1000
+                print(f"[INFO] Usando time_spent (tiempo manual): {tiempo_total_segundos/3600:.2f}h")
+            else:
+                print(f"[WARNING] No hay tiempo rastreado manualmente para esta tarea")
+                print(f"[INFO] Los usuarios deben usar el Time Tracker de ClickUp para registrar tiempo")
+                return 0, 0
 
         # Convertir a horas y minutos
         horas = int(tiempo_total_segundos // 3600)
