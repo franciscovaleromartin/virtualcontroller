@@ -5,7 +5,8 @@ Sistema de monitoreo y alertas para tareas de ClickUp.
 ## Características
 
 - **Autenticación OAuth con ClickUp**: Integración segura con tu cuenta de ClickUp
-- **Visualización de Tareas**: Muestra todas las tareas de tus espacios de ClickUp con:
+- **Selector de Proyectos**: Navega por espacios, carpetas y listas de manera jerárquica
+- **Visualización de Tareas**: Muestra todas las tareas de tus proyectos de ClickUp con:
   - Estado actual (completada, en progreso, pendiente)
   - Tiempo trabajado en cada tarea (horas y minutos)
   - Última actualización
@@ -74,15 +75,22 @@ Para usar Gmail como servidor SMTP:
 
 ## Uso
 
+### Visualizar Tareas
+
+1. Selecciona un espacio (Space) de ClickUp
+2. Selecciona un proyecto (Carpeta o Lista)
+3. Se mostrarán todas las tareas del proyecto con su tiempo trabajado
+
 ### Configurar Alertas por Tarea
 
 1. Selecciona un espacio (Space) de ClickUp
-2. Haz clic en el botón "Configurar" de cualquier tarea
-3. En el modal de configuración:
+2. Selecciona un proyecto
+3. Haz clic en el botón "Configurar" de cualquier tarea
+4. En el modal de configuración:
    - Activa el checkbox "Activar aviso de demora"
    - Ingresa el email donde recibirás las alertas
    - Configura el tiempo (horas y minutos) sin actualización para enviar alerta
-4. Haz clic en "Guardar"
+5. Haz clic en "Guardar"
 
 ### Cómo Funcionan las Alertas
 

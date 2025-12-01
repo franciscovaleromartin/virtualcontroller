@@ -350,6 +350,13 @@
                 </select>
             </div>
 
+            <div class="selector-section" id="project-section" style="display: none;">
+                <label for="project-select">Selecciona un Proyecto:</label>
+                <select id="project-select">
+                    <option value="">-- Selecciona un proyecto --</option>
+                </select>
+            </div>
+
             <div id="error-message" class="error hidden"></div>
             <div id="loading" class="loading hidden">Cargando listas...</div>
 
@@ -443,14 +450,152 @@
                 // Event listener para cuando se selecciona un space
                 select.addEventListener('change', function () {
                     if (this.value) {
-                        cargarListas(this.value);
+                        cargarProyectos(this.value);
                     } else {
+                        document.getElementById('project-section').style.display = 'none';
                         document.getElementById('table-container').classList.add('hidden');
                     }
                 });
 
             } catch (error) {
                 mostrarError('Error al cargar los espacios: ' + error.message);
+            }
+        }
+
+        // Función para cargar proyectos de un space
+        async function cargarProyectos(spaceId) {
+            try {
+                const projectSection = document.getElementById('project-section');
+                const projectSelect = document.getElementById('project-select');
+                const tableContainer = document.getElementById('table-container');
+
+                // Ocultar tabla mientras se cargan proyectos
+                tableContainer.classList.add('hidden');
+
+                // Mostrar mensaje de carga
+                projectSelect.innerHTML = '<option value="">Cargando proyectos...</option>';
+                projectSection.style.display = 'block';
+
+                const response = await fetch(`/api/space/${spaceId}/projects`);
+                const data = await response.json();
+
+                if (data.error) {
+                    mostrarError(data.error);
+                    return;
+                }
+
+                // Llenar el selector de proyectos
+                projectSelect.innerHTML = '<option value="">-- Selecciona un proyecto --</option>';
+
+                data.projects.forEach(project => {
+                    const option = document.createElement('option');
+                    option.value = JSON.stringify({ type: project.type, id: project.type === 'folder' ? project.folder_id : project.list_id });
+                    option.textContent = project.name;
+                    projectSelect.appendChild(option);
+                });
+
+                // Event listener para cuando se selecciona un proyecto
+                projectSelect.onchange = function() {
+                    if (this.value) {
+                        const projectData = JSON.parse(this.value);
+                        cargarTareasProyecto(projectData.type, projectData.id);
+                    } else {
+                        tableContainer.classList.add('hidden');
+                    }
+                };
+
+            } catch (error) {
+                mostrarError('Error al cargar los proyectos: ' + error.message);
+            }
+        }
+
+        // Función para cargar tareas de un proyecto específico
+        async function cargarTareasProyecto(projectType, projectId) {
+            const loading = document.getElementById('loading');
+            const tableContainer = document.getElementById('table-container');
+            const tbody = document.getElementById('lists-tbody');
+            const totalTiempoContainer = document.getElementById('total-tiempo-container');
+            const totalTiempoDiv = document.getElementById('total-tiempo');
+
+            loading.classList.remove('hidden');
+            tableContainer.classList.add('hidden');
+            ocultarError();
+
+            try {
+                const response = await fetch(`/api/project/${projectType}/${projectId}/tasks`);
+                const data = await response.json();
+
+                if (data.error) {
+                    mostrarError(data.error);
+                    loading.classList.add('hidden');
+                    return;
+                }
+
+                tbody.innerHTML = '';
+                tareasActuales = data.tasks;
+
+                let totalHoras = 0;
+                let totalMinutos = 0;
+
+                data.tasks.forEach(tarea => {
+                    const tr = document.createElement('tr');
+
+                    // Aplicar clase según el estado y si tiene alerta activa
+                    if (tarea.estado === 'completada') {
+                        tr.className = 'tarea-completada';
+                    } else if (tarea.estado === 'en_progreso') {
+                        tr.className = 'tarea-en-progreso';
+                    }
+
+                    if (tarea.alerta && tarea.alerta.aviso_activado) {
+                        tr.className = (tr.className ? tr.className + ' ' : '') + 'alerta-activa';
+                    }
+
+                    const estadoAlerta = tarea.alerta && tarea.alerta.aviso_activado ?
+                        `Activa (${tarea.alerta.aviso_horas}h ${tarea.alerta.aviso_minutos}m)` :
+                        'Sin configurar';
+
+                    // Formatear el tiempo trabajado
+                    const tiempoTrabajado = `${tarea.horas_trabajadas}h ${tarea.minutos_trabajados}m`;
+
+                    tr.innerHTML = `
+                        <td>
+                            <a href="${tarea.url}" target="_blank" class="tarea-link">${tarea.nombre}</a>
+                        </td>
+                        <td><strong>${tarea.estado_texto}</strong></td>
+                        <td>${tiempoTrabajado}</td>
+                        <td>${tarea.fecha_actualizacion}</td>
+                        <td>
+                            <button class="btn-config" onclick="abrirModalAlerta('${tarea.id}', '${tarea.nombre.replace(/'/g, "\\'")}')">
+                                Configurar
+                            </button>
+                            <br><small>${estadoAlerta}</small>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+
+                    // Sumar al tiempo total
+                    totalHoras += tarea.horas_trabajadas;
+                    totalMinutos += tarea.minutos_trabajados;
+                });
+
+                // Ajustar minutos si superan 60
+                totalHoras += Math.floor(totalMinutos / 60);
+                totalMinutos = totalMinutos % 60;
+
+                // Mostrar tiempo total
+                totalTiempoDiv.textContent = `${totalHoras}h ${totalMinutos}m`;
+                totalTiempoContainer.classList.remove('hidden');
+
+                loading.classList.add('hidden');
+                tableContainer.classList.remove('hidden');
+
+                // Iniciar verificación periódica de alertas
+                iniciarVerificacionAlertas();
+
+            } catch (error) {
+                mostrarError('Error al cargar las tareas: ' + error.message);
+                loading.classList.add('hidden');
             }
         }
 
@@ -649,9 +794,10 @@
                     alert('Alerta guardada correctamente');
                     cerrarModal();
                     // Recargar las tareas para mostrar la configuración actualizada
-                    const spaceSelect = document.getElementById('space-select');
-                    if (spaceSelect.value) {
-                        cargarListas(spaceSelect.value);
+                    const projectSelect = document.getElementById('project-select');
+                    if (projectSelect.value) {
+                        const projectData = JSON.parse(projectSelect.value);
+                        cargarTareasProyecto(projectData.type, projectData.id);
                     }
                 } else {
                     alert('Error al guardar la alerta: ' + (result.error || 'Error desconocido'));

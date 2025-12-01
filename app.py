@@ -143,8 +143,105 @@ def get_spaces():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/space/<space_id>/projects')
+def get_projects(space_id):
+    """Obtiene todas las carpetas y listas de un espacio"""
+    try:
+        headers = get_headers()
+        if not headers:
+            return jsonify({'error': 'No autenticado', 'redirect': '/login'}), 401
+
+        proyectos = []
+
+        # Obtener folders del space
+        folders_response = requests.get(
+            f'https://api.clickup.com/api/v2/space/{space_id}/folder',
+            headers=headers,
+            timeout=10
+        )
+
+        if folders_response.status_code == 200:
+            folders = folders_response.json()['folders']
+            for folder in folders:
+                # Añadir el folder como proyecto
+                proyectos.append({
+                    'id': f'folder_{folder["id"]}',
+                    'name': f'📁 {folder["name"]}',
+                    'type': 'folder',
+                    'folder_id': folder['id']
+                })
+
+                # Obtener las listas dentro de cada folder
+                folder_lists_response = requests.get(
+                    f'https://api.clickup.com/api/v2/folder/{folder["id"]}/list',
+                    headers=headers,
+                    timeout=10
+                )
+                if folder_lists_response.status_code == 200:
+                    for lista in folder_lists_response.json()['lists']:
+                        proyectos.append({
+                            'id': f'list_{lista["id"]}',
+                            'name': f'  📄 {lista["name"]}',
+                            'type': 'list',
+                            'list_id': lista['id']
+                        })
+
+        # Obtener listas sin folder (directamente en el space)
+        lists_response = requests.get(
+            f'https://api.clickup.com/api/v2/space/{space_id}/list',
+            headers=headers,
+            timeout=10
+        )
+
+        if lists_response.status_code == 200:
+            listas = lists_response.json()['lists']
+            for lista in listas:
+                proyectos.append({
+                    'id': f'list_{lista["id"]}',
+                    'name': f'📄 {lista["name"]}',
+                    'type': 'list',
+                    'list_id': lista['id']
+                })
+
+        return jsonify({'projects': proyectos})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/project/<project_type>/<project_id>/tasks')
+def get_project_tasks(project_type, project_id):
+    """Obtiene las tareas de un proyecto específico (folder o list)"""
+    try:
+        headers = get_headers()
+        if not headers:
+            return jsonify({'error': 'No autenticado', 'redirect': '/login'}), 401
+
+        todas_tareas = []
+
+        if project_type == 'folder':
+            # Si es un folder, obtener todas las listas del folder
+            folder_lists_response = requests.get(
+                f'https://api.clickup.com/api/v2/folder/{project_id}/list',
+                headers=headers,
+                timeout=10
+            )
+            if folder_lists_response.status_code == 200:
+                for lista in folder_lists_response.json()['lists']:
+                    tareas = obtener_tareas_de_lista(lista['id'], headers)
+                    todas_tareas.extend(tareas)
+        elif project_type == 'list':
+            # Si es una lista, obtener las tareas directamente
+            tareas = obtener_tareas_de_lista(project_id, headers)
+            todas_tareas.extend(tareas)
+
+        return jsonify({'tasks': todas_tareas})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/space/<space_id>/lists')
 def get_lists(space_id):
+    """Obtiene todas las tareas de un espacio (mantener para compatibilidad)"""
     try:
         headers = get_headers()
         if not headers:
