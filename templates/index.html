@@ -1,52 +1,441 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bienvenido - Virtual Controller</title>
+    <title>Virtual Controller SIDN</title>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
+
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
             min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px 40px;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .selector-section {
+            margin-bottom: 30px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: 600;
+            color: #333;
+            font-size: 1.1em;
+        }
+
+        select {
+            width: 100%;
+            padding: 12px 16px;
+            font-size: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        select:hover {
+            border-color: #667eea;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+            font-size: 1.2em;
+        }
+
+        .error {
+            background: #fee;
+            border: 2px solid #fcc;
+            color: #c33;
+            padding: 16px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            margin-top: 30px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+
+        th {
+            background: #f8f9fa;
+            padding: 16px;
+            text-align: left;
+            font-weight: 600;
+            color: #495057;
+            border-bottom: 2px solid #e0e0e0;
+            font-size: 0.95em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        td {
+            padding: 16px;
+            border-bottom: 1px solid #f0f0f0;
+            color: #333;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+
+        input[type="email"],
+        input[type="number"] {
+            width: 100%;
+            padding: 8px 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        input[type="email"]:focus,
+        input[type="number"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .time-input {
             display: flex;
-            justify-content: center;
+            gap: 8px;
             align-items: center;
         }
-        .container {
-            background: white;
-            padding: 60px 40px;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            text-align: center;
-            max-width: 500px;
+
+        .time-input input {
+            width: 60px;
         }
-        h1 {
+
+        .time-input span {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .btn-save {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .btn-save:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .tarea-link {
             color: #667eea;
-            font-size: 2.5em;
-            margin-bottom: 20px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s;
         }
-        p {
-            color: #555;
-            font-size: 1.2em;
-            line-height: 1.6;
+
+        .tarea-link:hover {
+            color: #764ba2;
+            text-decoration: underline;
         }
-        .emoji {
-            font-size: 4em;
-            margin-bottom: 20px;
+
+        .hidden {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .content {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 1.8em;
+            }
+
+            table {
+                font-size: 14px;
+            }
+
+            th,
+            td {
+                padding: 12px 8px;
+            }
         }
     </style>
 </head>
+
 <body>
     <div class="container">
-        <div class="emoji">🎮</div>
-        <h1>¡Bienvenido!</h1>
-        <p>Virtual Controller está funcionando correctamente</p>
+        <header>
+            <h1>Virtual Controller SIDN</h1>
+            <div class="subtitle">Sistema de monitoreo y alertas para ClickUp</div>
+        </header>
+
+        <div class="content">
+            <div class="selector-section">
+                <label for="space-select">Selecciona un Trabajo (Space):</label>
+                <select id="space-select">
+                    <option value="">Cargando espacios...</option>
+                </select>
+            </div>
+
+            <div id="error-message" class="error hidden"></div>
+            <div id="loading" class="loading hidden">Cargando listas...</div>
+
+            <div id="table-container" class="table-container hidden">
+                <table id="lists-table">
+                    <thead>
+                        <tr>
+                            <th>Lista</th>
+                            <th>Última Actualización</th>
+                            <th>Título Última Tarea</th>
+                            <th style="text-align: center;">Activar Aviso</th>
+                            <th>Avisar a (Email)</th>
+                            <th>Avisar en</th>
+                            <th style="text-align: center;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lists-tbody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
+
+    <script>
+        // Cargar Spaces al iniciar
+        document.addEventListener('DOMContentLoaded', function () {
+            cargarSpaces();
+        });
+
+        // Función para cargar spaces
+        async function cargarSpaces() {
+            try {
+                const response = await fetch('/api/spaces');
+                const data = await response.json();
+
+                if (data.error) {
+                    mostrarError(data.error);
+                    return;
+                }
+
+                const select = document.getElementById('space-select');
+                select.innerHTML = '<option value="">-- Selecciona un espacio --</option>';
+
+                data.spaces.forEach(space => {
+                    const option = document.createElement('option');
+                    option.value = space.id;
+                    option.textContent = space.name;
+                    select.appendChild(option);
+                });
+
+                // Event listener para cuando se selecciona un space
+                select.addEventListener('change', function () {
+                    if (this.value) {
+                        cargarListas(this.value);
+                    } else {
+                        document.getElementById('table-container').classList.add('hidden');
+                    }
+                });
+
+            } catch (error) {
+                mostrarError('Error al cargar los espacios: ' + error.message);
+            }
+        }
+
+        // Función para cargar listas de un space
+        async function cargarListas(spaceId) {
+            const loading = document.getElementById('loading');
+            const tableContainer = document.getElementById('table-container');
+            const tbody = document.getElementById('lists-tbody');
+
+            loading.classList.remove('hidden');
+            tableContainer.classList.add('hidden');
+            ocultarError();
+
+            try {
+                const response = await fetch(`/api/space/${spaceId}/lists`);
+                const data = await response.json();
+
+                if (data.error) {
+                    mostrarError(data.error);
+                    loading.classList.add('hidden');
+                    return;
+                }
+
+                tbody.innerHTML = '';
+
+                data.lists.forEach(lista => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td><strong>${lista.nombre}</strong></td>
+                        <td>${lista.ultima_actualizacion}</td>
+                        <td>
+                            ${lista.enlace_tarea ?
+                            `<a href="${lista.enlace_tarea}" target="_blank" class="tarea-link">${lista.titulo_ultima}</a>` :
+                            lista.titulo_ultima
+                        }
+                        </td>
+                        <td style="text-align: center;">
+                            <input type="checkbox" 
+                                   id="check-${lista.id}" 
+                                   ${lista.alerta.activa ? 'checked' : ''}>
+                        </td>
+                        <td>
+                            <input type="email" 
+                                   id="email-${lista.id}" 
+                                   placeholder="correo@ejemplo.com"
+                                   value="${lista.alerta.email}">
+                        </td>
+                        <td>
+                            <div class="time-input">
+                                <input type="number" 
+                                       id="horas-${lista.id}" 
+                                       min="0" 
+                                       placeholder="0"
+                                       value="${lista.alerta.horas}">
+                                <span>h</span>
+                                <input type="number" 
+                                       id="minutos-${lista.id}" 
+                                       min="0" 
+                                       max="59" 
+                                       placeholder="0"
+                                       value="${lista.alerta.minutos}">
+                                <span>min</span>
+                            </div>
+                        </td>
+                        <td style="text-align: center;">
+                            <button class="btn-save" onclick="guardarAlerta('${lista.id}')">
+                                Guardar
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+                loading.classList.add('hidden');
+                tableContainer.classList.remove('hidden');
+
+            } catch (error) {
+                mostrarError('Error al cargar las listas: ' + error.message);
+                loading.classList.add('hidden');
+            }
+        }
+
+        // Función para guardar alerta
+        async function guardarAlerta(listaId) {
+            const activa = document.getElementById(`check-${listaId}`).checked;
+            const email = document.getElementById(`email-${listaId}`).value;
+            const horas = document.getElementById(`horas-${listaId}`).value || 0;
+            const minutos = document.getElementById(`minutos-${listaId}`).value || 0;
+
+            if (activa && !email) {
+                alert('Por favor, introduce un email para recibir las alertas');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/alerta/guardar', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        lista_id: listaId,
+                        activa: activa,
+                        email: email,
+                        horas: horas,
+                        minutos: minutos
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert('✓ Alerta guardada correctamente');
+                } else {
+                    alert('Error al guardar: ' + (data.error || 'Error desconocido'));
+                }
+
+            } catch (error) {
+                alert('Error al guardar la alerta: ' + error.message);
+            }
+        }
+
+        // Funciones auxiliares
+        function mostrarError(mensaje) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = mensaje;
+            errorDiv.classList.remove('hidden');
+        }
+
+        function ocultarError() {
+            document.getElementById('error-message').classList.add('hidden');
+        }
+    </script>
 </body>
+
 </html>
