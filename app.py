@@ -3,6 +3,7 @@ import requests
 from datetime import datetime, timedelta
 import json
 import os
+import re
 from dotenv import load_dotenv
 import threading
 import time
@@ -269,6 +270,8 @@ def webhook_clickup():
         # Obtener datos del webhook de forma más robusta
         # Usar get_json con force=True para ignorar Content-Type y silent=True para no lanzar excepciones
         data = None
+        raw_data = None
+
         try:
             # Intentar primero con el Content-Type correcto
             data = request.get_json(silent=True)
@@ -281,18 +284,85 @@ def webhook_clickup():
             # Si aún no funciona, intentar leer el body raw
             if data is None:
                 raw_data = request.get_data(as_text=True)
-                print(f"[DEBUG] Body raw recibido: {raw_data[:500]}")  # Primeros 500 caracteres
+                print(f"[DEBUG] Body raw recibido ({len(raw_data)} caracteres):")
+                print(f"[DEBUG] {raw_data[:1000]}")  # Primeros 1000 caracteres para ver el problema
 
                 if raw_data:
                     try:
+                        # Intentar parsear el JSON directamente
                         data = json.loads(raw_data)
                     except json.JSONDecodeError as e:
-                        print(f"[ERROR] Error al parsear JSON manualmente: {str(e)}")
-                        return jsonify({
-                            'error': 'Bad Request',
-                            'message': 'El cuerpo de la solicitud no es JSON válido',
-                            'details': str(e)
-                        }), 400
+                        print(f"[ERROR] Error al parsear JSON: {str(e)}")
+                        print(f"[DEBUG] Línea con error (aproximada):")
+
+                        # Intentar mostrar la línea con el error
+                        try:
+                            lines = raw_data.split('\n')
+                            error_line = e.lineno - 1 if e.lineno <= len(lines) else 0
+                            if error_line >= 0 and error_line < len(lines):
+                                print(f"[DEBUG] Línea {e.lineno}: {lines[error_line]}")
+                                print(f"[DEBUG] Posición del error: {' ' * (e.colno - 1)}^")
+                        except:
+                            pass
+
+                        # Intentar limpiar problemas comunes de JSON
+                        print("[INFO] Intentando limpiar JSON malformado...")
+                        try:
+                            # Limpiar problemas comunes:
+                            # 1. Trailing commas: {"key": value,}
+                            # 2. Valores undefined o null mal escritos
+                            # 3. Comillas simples en lugar de dobles
+                            cleaned_data = raw_data
+
+                            # Remover trailing commas antes de } o ]
+                            cleaned_data = re.sub(r',\s*}', '}', cleaned_data)
+                            cleaned_data = re.sub(r',\s*]', ']', cleaned_data)
+
+                            # Intentar parsear el JSON limpio
+                            data = json.loads(cleaned_data)
+                            print("[INFO] ✓ JSON limpiado exitosamente")
+
+                        except json.JSONDecodeError as e2:
+                            print(f"[ERROR] No se pudo limpiar el JSON: {str(e2)}")
+
+                            # Si Make.com está enviando datos malformados, intentar extraer al menos
+                            # los campos esenciales manualmente
+                            print("[WARNING] Intentando extraer campos básicos del JSON malformado...")
+                            try:
+                                # Buscar task_id usando regex
+                                task_id_match = re.search(r'"task_id"\s*:\s*"([^"]+)"', raw_data)
+                                event_match = re.search(r'"event"\s*:\s*"([^"]+)"', raw_data)
+
+                                if task_id_match:
+                                    # Crear un objeto mínimo con los datos extraídos
+                                    data = {
+                                        'task_id': task_id_match.group(1),
+                                        'event': event_match.group(1) if event_match else 'taskStatusUpdated',
+                                        '_extracted_from_malformed': True,
+                                        '_original_error': str(e)
+                                    }
+                                    print(f"[INFO] ✓ Extraído task_id: {data['task_id']}")
+                                    print("[INFO] Se obtendrán los detalles completos desde la API de ClickUp")
+                                else:
+                                    # No se pudo extraer nada útil
+                                    return jsonify({
+                                        'error': 'Bad Request',
+                                        'message': 'El JSON está malformado y no se pudieron extraer campos básicos',
+                                        'details': str(e),
+                                        'line': e.lineno,
+                                        'column': e.colno,
+                                        'suggestion': 'Verifica la configuración del webhook en Make.com. Asegúrate de enviar JSON válido.'
+                                    }), 400
+                            except Exception as e3:
+                                print(f"[ERROR] No se pudieron extraer campos básicos: {str(e3)}")
+                                return jsonify({
+                                    'error': 'Bad Request',
+                                    'message': 'El cuerpo de la solicitud no es JSON válido',
+                                    'details': str(e),
+                                    'line': e.lineno,
+                                    'column': e.colno
+                                }), 400
+
         except Exception as e:
             print(f"[ERROR] Excepción al obtener datos JSON: {str(e)}")
             import traceback
