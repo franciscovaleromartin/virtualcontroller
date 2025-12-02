@@ -269,9 +269,11 @@ def save_task(task_data):
         description = task_data.get('description')
         priority = task_data.get('priority')
 
-        # Convertir assignees a JSON si es una lista
+        # Convertir assignees a JSON si es una lista (incluso si está vacía)
         assignees = task_data.get('assignees')
         if isinstance(assignees, list):
+            assignees = json.dumps(assignees)
+        elif assignees is not None and not isinstance(assignees, str):
             assignees = json.dumps(assignees)
 
         date_updated = task_data.get('date_updated')
@@ -285,17 +287,21 @@ def save_task(task_data):
         minutos_trabajados = task_data.get('minutos_trabajados', 0)
         parent_task_id = task_data.get('parent_task_id')
 
-        # Convertir custom_fields y tags a JSON si son listas/diccionarios
+        # Convertir custom_fields a JSON si es lista/dict (incluso si está vacío)
         custom_fields = task_data.get('custom_fields')
-        if custom_fields and not isinstance(custom_fields, str):
+        if custom_fields is not None and not isinstance(custom_fields, str):
             custom_fields = json.dumps(custom_fields)
 
+        # Convertir tags a JSON si es una lista (incluso si está vacía)
         tags = task_data.get('tags')
         if isinstance(tags, list):
             tags = json.dumps(tags)
+        elif tags is not None and not isinstance(tags, str):
+            tags = json.dumps(tags)
 
+        # Convertir metadata a JSON si es dict/list (incluso si está vacío)
         metadata = task_data.get('metadata')
-        if metadata and not isinstance(metadata, str):
+        if metadata is not None and not isinstance(metadata, str):
             metadata = json.dumps(metadata)
 
         cursor.execute("""

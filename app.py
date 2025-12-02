@@ -311,16 +311,29 @@ def webhook_clickup():
                             # Limpiar problemas comunes:
                             # 1. Trailing commas: {"key": value,}
                             # 2. Valores undefined o null mal escritos
-                            # 3. Comillas simples en lugar de dobles
+                            # 3. Valores vacíos: "key": , -> "key": null
+                            # 4. Arrays vacíos malformados: "key": , -> "key": []
                             cleaned_data = raw_data
 
                             # Remover trailing commas antes de } o ]
                             cleaned_data = re.sub(r',\s*}', '}', cleaned_data)
                             cleaned_data = re.sub(r',\s*]', ']', cleaned_data)
 
+                            # Arreglar valores vacíos: "key": , -> "key": null
+                            # Primero, reemplazar arrays/objetos vacíos explícitos
+                            cleaned_data = re.sub(r':\s*,', ': null,', cleaned_data)
+                            cleaned_data = re.sub(r':\s*\n', ': null\n', cleaned_data)
+
+                            # Casos específicos de Make.com donde arrays están vacíos
+                            # "assignees": , -> "assignees": []
+                            cleaned_data = re.sub(r'"assignees"\s*:\s*null', '"assignees": []', cleaned_data)
+                            cleaned_data = re.sub(r'"tags"\s*:\s*null', '"tags": []', cleaned_data)
+                            cleaned_data = re.sub(r'"custom_fields"\s*:\s*null', '"custom_fields": {}', cleaned_data)
+
                             # Intentar parsear el JSON limpio
                             data = json.loads(cleaned_data)
                             print("[INFO] ✓ JSON limpiado exitosamente")
+                            print(f"[DEBUG] JSON limpio: {json.dumps(data, indent=2)}")
 
                         except json.JSONDecodeError as e2:
                             print(f"[ERROR] No se pudo limpiar el JSON: {str(e2)}")
