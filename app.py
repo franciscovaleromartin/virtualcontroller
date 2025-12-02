@@ -9,6 +9,7 @@ import time
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from urllib.parse import quote
 import db  # Importar módulo de base de datos
 
 load_dotenv()
@@ -121,7 +122,12 @@ def login():
 
     print(f"[DEBUG] CLIENT_ID: {CLICKUP_CLIENT_ID}")
 
-    auth_url = f"https://app.clickup.com/api?client_id={CLICKUP_CLIENT_ID}&redirect_uri={callback_url}"
+    # Codificar la URL de callback para asegurar compatibilidad
+    encoded_callback_url = quote(callback_url, safe='')
+    auth_url = f"https://app.clickup.com/api?client_id={CLICKUP_CLIENT_ID}&redirect_uri={encoded_callback_url}"
+
+    print(f"[DEBUG] Callback URL original: {callback_url}")
+    print(f"[DEBUG] Callback URL codificada: {encoded_callback_url}")
     print(f"[DEBUG] Redirigiendo a ClickUp OAuth: {auth_url}")
 
     # Si hay parámetro ?debug=1, mostrar info en vez de redirigir
