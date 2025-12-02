@@ -18,6 +18,7 @@ app.secret_key = os.urandom(24)
 
 CLICKUP_CLIENT_ID = os.getenv('CLICKUP_CLIENT_ID')
 CLICKUP_CLIENT_SECRET = os.getenv('CLICKUP_CLIENT_SECRET')
+REDIRECT_URI = os.getenv('REDIRECT_URI')  # URL de callback de OAuth
 
 # Configuración de email para alertas
 SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
@@ -110,10 +111,14 @@ def login():
     if not CLICKUP_CLIENT_SECRET:
         return "Error: CLICKUP_CLIENT_SECRET no está configurado en .env", 500
 
-    # Construir la URL de callback completa (usando la raíz /)
-    callback_url = url_for('inicio', _external=True)
+    # Usar REDIRECT_URI si está configurada, sino generar automáticamente
+    if REDIRECT_URI:
+        callback_url = REDIRECT_URI
+        print(f"[DEBUG] Usando REDIRECT_URI de variable de entorno: {callback_url}")
+    else:
+        callback_url = url_for('inicio', _external=True)
+        print(f"[DEBUG] Generando callback_url automáticamente: {callback_url}")
 
-    print(f"[DEBUG] Callback URL generada: {callback_url}")
     print(f"[DEBUG] CLIENT_ID: {CLICKUP_CLIENT_ID}")
 
     auth_url = f"https://app.clickup.com/api?client_id={CLICKUP_CLIENT_ID}&redirect_uri={callback_url}"
