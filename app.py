@@ -251,6 +251,11 @@ def webhook_clickup():
     webhook_log_id = None
 
     try:
+        # Registrar información del request para debugging
+        print(f"[DEBUG] Webhook recibido - Content-Type: {request.content_type}")
+        print(f"[DEBUG] Webhook recibido - User-Agent: {request.headers.get('User-Agent')}")
+        print(f"[DEBUG] Webhook recibido - Content-Length: {request.content_length}")
+
         # Validar token de seguridad
         token_header = request.headers.get('X-Webhook-Token')
         token_query = request.args.get('token')
@@ -261,11 +266,46 @@ def webhook_clickup():
             print(f"[ERROR] Token inválido en webhook. Header: {token_header}, Query: {token_query}")
             return jsonify({'error': 'Unauthorized', 'message': 'Token inválido'}), 401
 
-        # Obtener datos del webhook
-        data = request.json
+        # Obtener datos del webhook de forma más robusta
+        # Usar get_json con force=True para ignorar Content-Type y silent=True para no lanzar excepciones
+        data = None
+        try:
+            # Intentar primero con el Content-Type correcto
+            data = request.get_json(silent=True)
+
+            # Si no funciona, intentar forzar el parseo
+            if data is None:
+                print("[WARNING] No se pudo parsear JSON con Content-Type, intentando force=True")
+                data = request.get_json(force=True, silent=True)
+
+            # Si aún no funciona, intentar leer el body raw
+            if data is None:
+                raw_data = request.get_data(as_text=True)
+                print(f"[DEBUG] Body raw recibido: {raw_data[:500]}")  # Primeros 500 caracteres
+
+                if raw_data:
+                    try:
+                        data = json.loads(raw_data)
+                    except json.JSONDecodeError as e:
+                        print(f"[ERROR] Error al parsear JSON manualmente: {str(e)}")
+                        return jsonify({
+                            'error': 'Bad Request',
+                            'message': 'El cuerpo de la solicitud no es JSON válido',
+                            'details': str(e)
+                        }), 400
+        except Exception as e:
+            print(f"[ERROR] Excepción al obtener datos JSON: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({
+                'error': 'Bad Request',
+                'message': 'Error al procesar el cuerpo de la solicitud',
+                'details': str(e)
+            }), 400
+
         if not data:
-            print("[ERROR] Webhook recibido sin datos JSON")
-            return jsonify({'error': 'Bad Request', 'message': 'No se recibieron datos'}), 400
+            print("[ERROR] Webhook recibido sin datos JSON o con datos vacíos")
+            return jsonify({'error': 'Bad Request', 'message': 'No se recibieron datos válidos'}), 400
 
         print(f"[INFO] Webhook recibido: {json.dumps(data, indent=2)}")
 
