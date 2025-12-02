@@ -12,11 +12,15 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from urllib.parse import quote
 import db  # Importar módulo de base de datos
+from flask_socketio import SocketIO, emit
 
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
+
+# Inicializar SocketIO
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 CLICKUP_CLIENT_ID = os.getenv('CLICKUP_CLIENT_ID')
 CLICKUP_CLIENT_SECRET = os.getenv('CLICKUP_CLIENT_SECRET')
@@ -567,12 +571,24 @@ def process_task_event(event_type, data):
         return {'status': 'error', 'message': 'task_id requerido'}
 
     if event_type in ['taskDeleted', 'taskDeleted']:
+        # Obtener list_id antes de eliminar
+        old_task = db.get_task(task_id)
+        list_id_deleted = old_task.get('list_id') if old_task else None
+
         # Eliminar tarea de la base de datos
         db.delete_task(task_id)
         # Eliminar del caché
         if task_id in tareas_cache:
             del tareas_cache[task_id]
+
+        # Emitir evento WebSocket
+        socketio.emit('task_deleted', {
+            'task_id': task_id,
+            'list_id': list_id_deleted
+        }, namespace='/')
+
         print(f"[INFO] Tarea {task_id} eliminada")
+        print(f"[INFO] Evento WebSocket 'task_deleted' emitido para tarea {task_id}")
         return {'status': 'deleted', 'task_id': task_id}
 
     # Para taskCreated, taskUpdated, taskStatusUpdated
@@ -591,6 +607,11 @@ def process_task_event(event_type, data):
     time_spent = data.get('time_spent')
     tags = data.get('tags', [])
     custom_fields = data.get('custom_fields', [])
+
+    # Obtener el estado anterior de la tarea
+    old_task = db.get_task(task_id)
+    old_status = old_task.get('status') if old_task else None
+    old_status_text = old_task.get('status_text') if old_task else None
 
     # Determinar el estado de la tarea
     estado = 'pendiente'
@@ -626,6 +647,17 @@ def process_task_event(event_type, data):
     # Guardar en base de datos
     db.save_task(task_data)
 
+    # Registrar cambio de estado si ha cambiado
+    if old_status != estado:
+        db.save_status_change(
+            task_id=task_id,
+            old_status=old_status,
+            new_status=estado,
+            old_status_text=old_status_text,
+            new_status_text=data.get('status', 'Sin estado')
+        )
+        print(f"[INFO] Cambio de estado registrado: {task_id} de '{old_status}' a '{estado}'")
+
     # Guardar en caché para acceso rápido
     tareas_cache[task_id] = {
         'id': task_id,
@@ -642,6 +674,31 @@ def process_task_event(event_type, data):
 
     print(f"[INFO] Tarea {task_id} guardada en BD y caché: {task_name}")
 
+    # Emitir evento WebSocket según el tipo de evento
+    if event_type == 'taskCreated':
+        socketio.emit('task_created', {
+            'task_id': task_id,
+            'task': tareas_cache[task_id],
+            'list_id': list_id
+        }, namespace='/')
+        print(f"[INFO] Evento WebSocket 'task_created' emitido para tarea {task_id}")
+    elif event_type == 'taskDeleted':
+        socketio.emit('task_deleted', {
+            'task_id': task_id,
+            'list_id': list_id
+        }, namespace='/')
+        print(f"[INFO] Evento WebSocket 'task_deleted' emitido para tarea {task_id}")
+    elif event_type in ['taskUpdated', 'taskStatusUpdated']:
+        socketio.emit('task_updated', {
+            'task_id': task_id,
+            'task': tareas_cache[task_id],
+            'list_id': list_id,
+            'status_changed': old_status != estado,
+            'old_status': old_status,
+            'new_status': estado
+        }, namespace='/')
+        print(f"[INFO] Evento WebSocket 'task_updated' emitido para tarea {task_id}")
+
     # Verificar alertas si está configurada
     alert = db.get_task_alert(task_id)
     if alert and alert.get('aviso_activado'):
@@ -651,7 +708,7 @@ def process_task_event(event_type, data):
 
 
 def process_list_event(event_type, data):
-    """Procesa eventos relacionados con listas"""
+    """Procesa eventos relacionados con listas (proyectos)"""
     list_id = data.get('list_id')
     if not list_id:
         return {'status': 'error', 'message': 'list_id requerido'}
@@ -662,20 +719,38 @@ def process_list_event(event_type, data):
     archived = data.get('archived', False)
 
     if event_type == 'listDeleted':
-        # Eliminar lista (esto también eliminará las tareas asociadas por CASCADE)
+        # Emitir evento WebSocket
+        socketio.emit('project_deleted', {
+            'project_id': list_id,
+            'project_type': 'list',
+            'space_id': space_id
+        }, namespace='/')
+
         print(f"[INFO] Lista {list_id} eliminada")
-        # La eliminación se manejará cuando se sincronice con la API
+        print(f"[INFO] Evento WebSocket 'project_deleted' emitido para lista {list_id}")
         return {'status': 'deleted', 'list_id': list_id}
 
     # Guardar lista en BD
     db.save_list(list_id, list_name, space_id, folder_id, archived, metadata=data)
     print(f"[INFO] Lista {list_id} guardada: {list_name}")
 
+    # Emitir evento WebSocket
+    event_name = 'project_created' if event_type == 'listCreated' else 'project_updated'
+    socketio.emit(event_name, {
+        'project_id': list_id,
+        'project_type': 'list',
+        'project_name': list_name,
+        'space_id': space_id,
+        'folder_id': folder_id,
+        'archived': archived
+    }, namespace='/')
+    print(f"[INFO] Evento WebSocket '{event_name}' emitido para lista {list_id}")
+
     return {'status': 'saved', 'list_id': list_id, 'name': list_name}
 
 
 def process_folder_event(event_type, data):
-    """Procesa eventos relacionados con carpetas"""
+    """Procesa eventos relacionados con carpetas (proyectos)"""
     folder_id = data.get('folder_id')
     if not folder_id:
         return {'status': 'error', 'message': 'folder_id requerido'}
@@ -684,8 +759,31 @@ def process_folder_event(event_type, data):
     space_id = data.get('space_id')
     hidden = data.get('hidden', False)
 
+    if event_type == 'folderDeleted':
+        # Emitir evento WebSocket
+        socketio.emit('project_deleted', {
+            'project_id': folder_id,
+            'project_type': 'folder',
+            'space_id': space_id
+        }, namespace='/')
+
+        print(f"[INFO] Carpeta {folder_id} eliminada")
+        print(f"[INFO] Evento WebSocket 'project_deleted' emitido para carpeta {folder_id}")
+        return {'status': 'deleted', 'folder_id': folder_id}
+
     db.save_folder(folder_id, folder_name, space_id, hidden, metadata=data)
     print(f"[INFO] Carpeta {folder_id} guardada: {folder_name}")
+
+    # Emitir evento WebSocket
+    event_name = 'project_created' if event_type == 'folderCreated' else 'project_updated'
+    socketio.emit(event_name, {
+        'project_id': folder_id,
+        'project_type': 'folder',
+        'project_name': folder_name,
+        'space_id': space_id,
+        'hidden': hidden
+    }, namespace='/')
+    print(f"[INFO] Evento WebSocket '{event_name}' emitido para carpeta {folder_id}")
 
     return {'status': 'saved', 'folder_id': folder_id, 'name': folder_name}
 
@@ -699,8 +797,27 @@ def process_space_event(event_type, data):
     space_name = data.get('space_name') or data.get('name', 'Sin nombre')
     team_id = data.get('team_id')
 
+    if event_type == 'spaceDeleted':
+        # Emitir evento WebSocket
+        socketio.emit('space_deleted', {
+            'space_id': space_id
+        }, namespace='/')
+
+        print(f"[INFO] Espacio {space_id} eliminado")
+        print(f"[INFO] Evento WebSocket 'space_deleted' emitido para espacio {space_id}")
+        return {'status': 'deleted', 'space_id': space_id}
+
     db.save_space(space_id, space_name, team_id, metadata=data)
     print(f"[INFO] Espacio {space_id} guardado: {space_name}")
+
+    # Emitir evento WebSocket
+    event_name = 'space_created' if event_type == 'spaceCreated' else 'space_updated'
+    socketio.emit(event_name, {
+        'space_id': space_id,
+        'space_name': space_name,
+        'team_id': team_id
+    }, namespace='/')
+    print(f"[INFO] Evento WebSocket '{event_name}' emitido para espacio {space_id}")
 
     return {'status': 'saved', 'space_id': space_id, 'name': space_name}
 
@@ -1438,5 +1555,89 @@ def verificar_alertas():
         print(f"[ERROR] Error en verificación de alertas: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+
+@app.route('/api/tasks/time-tracking', methods=['GET'])
+def get_tasks_time_tracking():
+    """
+    Obtiene información de tiempo para todas las tareas en progreso
+    Retorna un diccionario con task_id como clave y datos de tiempo como valor
+    """
+    try:
+        # Obtener todas las tareas actualmente en progreso
+        in_progress_tasks = db.get_active_in_progress_tasks()
+
+        result = {}
+        for task in in_progress_tasks:
+            task_id = task['id']
+            time_data = db.calculate_task_time_in_progress(task_id)
+            result[task_id] = {
+                'task_id': task_id,
+                'task_name': task['name'],
+                'total_seconds': time_data['total_seconds'],
+                'current_session_start': time_data['current_session_start'],
+                'is_currently_in_progress': time_data['is_currently_in_progress']
+            }
+
+        return jsonify({
+            'success': True,
+            'tasks': result
+        })
+
+    except Exception as e:
+        print(f"[ERROR] Error al obtener tiempos de tareas: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/task/<task_id>/time-tracking', methods=['GET'])
+def get_task_time_tracking(task_id):
+    """
+    Obtiene información de tiempo para una tarea específica
+    """
+    try:
+        task = db.get_task(task_id)
+        if not task:
+            return jsonify({'error': 'Tarea no encontrada'}), 404
+
+        time_data = db.calculate_task_time_in_progress(task_id)
+
+        return jsonify({
+            'success': True,
+            'task_id': task_id,
+            'task_name': task['name'],
+            'status': task['status'],
+            'total_seconds': time_data['total_seconds'],
+            'current_session_start': time_data['current_session_start'],
+            'is_currently_in_progress': time_data['is_currently_in_progress']
+        })
+
+    except Exception as e:
+        print(f"[ERROR] Error al obtener tiempo de tarea {task_id}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/task/<task_id>/status-history', methods=['GET'])
+def get_task_status_history_api(task_id):
+    """
+    Obtiene el historial de cambios de estado de una tarea
+    """
+    try:
+        history = db.get_status_history(task_id)
+        return jsonify({
+            'success': True,
+            'task_id': task_id,
+            'history': history
+        })
+
+    except Exception as e:
+        print(f"[ERROR] Error al obtener historial de tarea {task_id}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    socketio.run(app, debug=True, host='0.0.0.0', port=5000)

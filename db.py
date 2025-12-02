@@ -137,6 +137,20 @@ def init_db():
             )
         """)
 
+        # Tabla de historial de cambios de estado de tareas
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS task_status_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id TEXT NOT NULL,
+                old_status TEXT,
+                new_status TEXT NOT NULL,
+                old_status_text TEXT,
+                new_status_text TEXT,
+                changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+            )
+        """)
+
         # Índices para mejorar rendimiento
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_list_id ON tasks(list_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)")
@@ -146,6 +160,8 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_folders_space_id ON folders(space_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_webhooks_event_type ON webhooks_log(event_type)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_webhooks_processed ON webhooks_log(processed)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_status_history_task_id ON task_status_history(task_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_status_history_changed_at ON task_status_history(changed_at)")
 
         conn.commit()
         print("[INFO] Base de datos inicializada correctamente")
@@ -511,6 +527,113 @@ def get_webhook_stats():
             GROUP BY event_type
         """)
         return [dict(row) for row in cursor.fetchall()]
+
+
+# === FUNCIONES PARA TASK STATUS HISTORY ===
+
+def save_status_change(task_id, old_status, new_status, old_status_text=None, new_status_text=None):
+    """Registra un cambio de estado de una tarea"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO task_status_history (
+                task_id, old_status, new_status, old_status_text, new_status_text, changed_at
+            )
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        """, (task_id, old_status, new_status, old_status_text, new_status_text))
+        conn.commit()
+        return cursor.lastrowid
+
+
+def get_status_history(task_id):
+    """Obtiene el historial de cambios de estado de una tarea"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM task_status_history
+            WHERE task_id = ?
+            ORDER BY changed_at ASC
+        """, (task_id,))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_active_in_progress_tasks():
+    """Obtiene todas las tareas actualmente en estado 'en_progreso'"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, name, list_id, status, status_text, date_updated
+            FROM tasks
+            WHERE status = 'en_progreso'
+        """)
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def calculate_task_time_in_progress(task_id):
+    """
+    Calcula el tiempo total que una tarea ha estado en progreso
+    Retorna un diccionario con:
+    - total_seconds: segundos totales en progreso
+    - current_session_start: timestamp del inicio de la sesión actual (si está en progreso)
+    - is_currently_in_progress: boolean indicando si está actualmente en progreso
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        # Obtener el estado actual de la tarea
+        cursor.execute("SELECT status FROM tasks WHERE id = ?", (task_id,))
+        row = cursor.fetchone()
+        current_status = dict(row)['status'] if row else None
+
+        # Obtener historial de cambios de estado
+        cursor.execute("""
+            SELECT new_status, changed_at
+            FROM task_status_history
+            WHERE task_id = ?
+            ORDER BY changed_at ASC
+        """, (task_id,))
+
+        history = [dict(row) for row in cursor.fetchall()]
+
+        total_seconds = 0
+        current_session_start = None
+        in_progress_start = None
+
+        # Calcular tiempo acumulado
+        for record in history:
+            status = record['new_status']
+            timestamp = datetime.fromisoformat(record['changed_at'])
+
+            if status == 'en_progreso':
+                # Inicio de un periodo en progreso
+                in_progress_start = timestamp
+            elif in_progress_start:
+                # Fin de un periodo en progreso
+                duration = (timestamp - in_progress_start).total_seconds()
+                total_seconds += duration
+                in_progress_start = None
+
+        # Si actualmente está en progreso, el periodo actual está abierto
+        is_currently_in_progress = current_status == 'en_progreso'
+        if is_currently_in_progress and in_progress_start:
+            current_session_start = in_progress_start.isoformat()
+        elif is_currently_in_progress and not in_progress_start:
+            # No hay historial pero está en progreso, buscar la fecha de actualización
+            cursor.execute("SELECT date_updated FROM tasks WHERE id = ?", (task_id,))
+            row = cursor.fetchone()
+            if row:
+                date_updated = dict(row)['date_updated']
+                if date_updated:
+                    try:
+                        current_session_start = datetime.fromisoformat(date_updated).isoformat()
+                    except:
+                        current_session_start = datetime.now().isoformat()
+
+        return {
+            'total_seconds': total_seconds,
+            'current_session_start': current_session_start,
+            'is_currently_in_progress': is_currently_in_progress
+        }
 
 
 # Inicializar base de datos al importar el módulo
