@@ -19,6 +19,7 @@ app.secret_key = os.urandom(24)
 
 CLICKUP_CLIENT_ID = os.getenv('CLICKUP_CLIENT_ID')
 CLICKUP_CLIENT_SECRET = os.getenv('CLICKUP_CLIENT_SECRET')
+CLICKUP_API_TOKEN = os.getenv('CLICKUP_API_TOKEN')  # Token personal para webhooks
 REDIRECT_URI = os.getenv('REDIRECT_URI')  # URL de callback de OAuth
 
 # Configuración de email para alertas
@@ -177,6 +178,57 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
+def fetch_task_from_clickup_api(task_id, access_token=None):
+    """
+    Obtiene los detalles completos de una tarea desde la API de ClickUp
+
+    Args:
+        task_id: ID de la tarea
+        access_token: Token de acceso (opcional, usa el de sesión o CLICKUP_API_TOKEN)
+
+    Returns:
+        dict con los datos de la tarea o None si hay error
+    """
+    try:
+        # Prioridad de tokens:
+        # 1. Token proporcionado como argumento
+        # 2. Token de sesión (si existe)
+        # 3. Token de configuración CLICKUP_API_TOKEN
+        if not access_token and 'access_token' in session:
+            access_token = session['access_token']
+
+        if not access_token and CLICKUP_API_TOKEN:
+            access_token = CLICKUP_API_TOKEN
+            print(f"[INFO] Usando CLICKUP_API_TOKEN para obtener detalles de tarea {task_id}")
+
+        if not access_token:
+            print(f"[ERROR] No hay token de acceso disponible para obtener tarea {task_id}")
+            print("[ERROR] Configure CLICKUP_API_TOKEN en el archivo .env para permitir webhooks desde Make.com")
+            return None
+
+        headers = {
+            'Authorization': access_token,
+            'Content-Type': 'application/json'
+        }
+
+        url = f'https://api.clickup.com/api/v2/task/{task_id}'
+        print(f"[INFO] Obteniendo detalles de tarea {task_id} desde API de ClickUp...")
+
+        response = requests.get(url, headers=headers, timeout=10)
+
+        if response.status_code == 200:
+            task_data = response.json()
+            print(f"[INFO] Tarea {task_id} obtenida exitosamente desde API")
+            return task_data
+        else:
+            print(f"[ERROR] Error al obtener tarea {task_id}: {response.status_code} - {response.text}")
+            return None
+
+    except Exception as e:
+        print(f"[ERROR] Excepción al obtener tarea {task_id} desde API: {str(e)}")
+        return None
+
+
 @app.route('/webhook/clickup', methods=['POST'])
 def webhook_clickup():
     """
@@ -191,6 +243,7 @@ def webhook_clickup():
     Formatos aceptados:
     1. Webhook directo de ClickUp con estructura estándar
     2. Webhook desde make.com con formato simplificado
+    3. Webhook con solo task_id (obtiene detalles desde API)
 
     Headers esperados:
     - X-Webhook-Token: token de seguridad
@@ -224,6 +277,45 @@ def webhook_clickup():
         list_id = data.get('list_id')
         folder_id = data.get('folder_id')
         space_id = data.get('space_id')
+
+        # Si es un evento de tarea pero faltan datos completos, obtenerlos de la API
+        if 'task' in event_type.lower() and task_id:
+            # Verificar si tenemos los datos mínimos necesarios
+            if not data.get('task_name') and not data.get('name'):
+                print(f"[INFO] Webhook incompleto detectado, obteniendo detalles de tarea {task_id} desde API...")
+                task_details = fetch_task_from_clickup_api(task_id)
+
+                if task_details:
+                    # Enriquecer los datos del webhook con la información completa
+                    data['task_name'] = task_details.get('name', 'Sin nombre')
+                    data['status'] = task_details.get('status', {}).get('status', 'Sin estado')
+                    data['list_id'] = task_details.get('list', {}).get('id')
+                    data['folder_id'] = task_details.get('folder', {}).get('id')
+                    data['space_id'] = task_details.get('space', {}).get('id')
+                    data['url'] = task_details.get('url', '')
+                    data['description'] = task_details.get('description', '')
+                    data['priority'] = task_details.get('priority', {}).get('priority')
+                    data['assignees'] = task_details.get('assignees', [])
+                    data['date_created'] = task_details.get('date_created')
+                    data['date_updated'] = task_details.get('date_updated')
+                    data['due_date'] = task_details.get('due_date')
+                    data['start_date'] = task_details.get('start_date')
+                    data['time_estimate'] = task_details.get('time_estimate')
+                    data['time_spent'] = task_details.get('time_spent')
+                    data['tags'] = task_details.get('tags', [])
+                    data['custom_fields'] = task_details.get('custom_fields', [])
+
+                    # Actualizar IDs si no estaban presentes
+                    if not list_id:
+                        list_id = data.get('list_id')
+                    if not folder_id:
+                        folder_id = data.get('folder_id')
+                    if not space_id:
+                        space_id = data.get('space_id')
+
+                    print(f"[INFO] Datos de tarea {task_id} enriquecidos desde API")
+                else:
+                    print(f"[WARNING] No se pudieron obtener detalles de la tarea {task_id} desde API")
 
         # Registrar webhook en base de datos
         webhook_log_id = db.log_webhook(
