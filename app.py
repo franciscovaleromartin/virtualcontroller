@@ -18,6 +18,7 @@ app.secret_key = os.urandom(24)
 
 CLICKUP_CLIENT_ID = os.getenv('CLICKUP_CLIENT_ID')
 CLICKUP_CLIENT_SECRET = os.getenv('CLICKUP_CLIENT_SECRET')
+REDIRECT_URI = os.getenv('REDIRECT_URI')  # URL de callback de OAuth
 
 # Configuración de email para alertas
 SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
@@ -107,13 +108,62 @@ def login():
     if not CLICKUP_CLIENT_ID:
         return "Error: CLICKUP_CLIENT_ID no está configurado en .env", 500
 
-    # Construir la URL de callback completa (usando la raíz /)
-    callback_url = url_for('inicio', _external=True)
+    if not CLICKUP_CLIENT_SECRET:
+        return "Error: CLICKUP_CLIENT_SECRET no está configurado en .env", 500
 
-    print(f"[DEBUG] Callback URL generada: {callback_url}")
+    # Usar REDIRECT_URI si está configurada, sino generar automáticamente
+    if REDIRECT_URI:
+        callback_url = REDIRECT_URI
+        print(f"[DEBUG] Usando REDIRECT_URI de variable de entorno: {callback_url}")
+    else:
+        callback_url = url_for('inicio', _external=True)
+        print(f"[DEBUG] Generando callback_url automáticamente: {callback_url}")
+
+    print(f"[DEBUG] CLIENT_ID: {CLICKUP_CLIENT_ID}")
 
     auth_url = f"https://app.clickup.com/api?client_id={CLICKUP_CLIENT_ID}&redirect_uri={callback_url}"
     print(f"[DEBUG] Redirigiendo a ClickUp OAuth: {auth_url}")
+
+    # Si hay parámetro ?debug=1, mostrar info en vez de redirigir
+    if request.args.get('debug') == '1':
+        return f"""
+        <html>
+        <head><title>Debug OAuth</title></head>
+        <body style="font-family: monospace; padding: 20px;">
+            <h1>Información de Debug OAuth</h1>
+            <h2>Variables de Entorno:</h2>
+            <p><strong>CLICKUP_CLIENT_ID:</strong> {CLICKUP_CLIENT_ID}</p>
+            <p><strong>CLICKUP_CLIENT_SECRET:</strong> {'✓ Configurado' if CLICKUP_CLIENT_SECRET else '✗ NO configurado'}</p>
+
+            <h2>URLs Generadas:</h2>
+            <p><strong>Callback URL:</strong> <code>{callback_url}</code></p>
+            <p><strong>URL de Autorización:</strong></p>
+            <textarea style="width: 100%; height: 100px; font-family: monospace;">{auth_url}</textarea>
+
+            <h2>¿Qué verificar en ClickUp?</h2>
+            <ol>
+                <li>Ve a <a href="https://app.clickup.com/settings/apps" target="_blank">https://app.clickup.com/settings/apps</a></li>
+                <li>Busca la aplicación con CLIENT_ID: <strong>{CLICKUP_CLIENT_ID}</strong></li>
+                <li>Verifica que la <strong>Redirect URL</strong> registrada sea EXACTAMENTE: <code>{callback_url}</code></li>
+                <li>Verifica que la aplicación esté <strong>Activa</strong> (no deshabilitada)</li>
+            </ol>
+
+            <h2>Problemas comunes:</h2>
+            <ul>
+                <li>❌ La URL tiene <code>http</code> en ClickUp pero aquí genera <code>https</code> (o viceversa)</li>
+                <li>❌ La URL tiene <code>www</code> en ClickUp pero aquí no (o viceversa)</li>
+                <li>❌ El CLIENT_ID no existe o fue copiado mal</li>
+                <li>❌ La aplicación OAuth fue eliminada o deshabilitada en ClickUp</li>
+            </ul>
+
+            <br><br>
+            <a href="/login" style="background: #667eea; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+                Intentar Login Normal
+            </a>
+        </body>
+        </html>
+        """
+
     return redirect(auth_url)
 
 @app.route('/logout')
