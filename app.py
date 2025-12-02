@@ -102,6 +102,13 @@ def handle_oauth_callback(code):
 
 @app.route('/login')
 def login():
+    # Validar que las variables de entorno estén configuradas
+    if not CLICKUP_CLIENT_ID:
+        return "Error: CLICKUP_CLIENT_ID no está configurado en .env", 500
+
+    if not REDIRECT_URI:
+        return "Error: REDIRECT_URI no está configurado en .env", 500
+
     auth_url = f"https://app.clickup.com/api?client_id={CLICKUP_CLIENT_ID}&redirect_uri={REDIRECT_URI}"
     print(f"[DEBUG] Redirigiendo a ClickUp OAuth: {auth_url}")
     return redirect(auth_url)
