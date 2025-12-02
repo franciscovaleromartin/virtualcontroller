@@ -230,6 +230,74 @@ def fetch_task_from_clickup_api(task_id, access_token=None):
         return None
 
 
+def parse_date_flexible(date_value):
+    """
+    Convierte una fecha en múltiples formatos a ISO string
+
+    Soporta:
+    - Timestamps Unix en milisegundos (int o string): "1701456488876" o 1701456488876
+    - Strings ISO 8601: "2025-12-01T20:28:08.876Z"
+    - Strings vacíos: ""
+    - None
+
+    Returns:
+        String en formato ISO o None
+    """
+    if not date_value or date_value == "":
+        return None
+
+    try:
+        # Si ya es un string ISO 8601, verificar y retornarlo
+        if isinstance(date_value, str) and 'T' in date_value:
+            # Intentar parsear para validar
+            try:
+                datetime.fromisoformat(date_value.replace('Z', '+00:00'))
+                return date_value
+            except:
+                pass
+
+        # Si es un número o string de número (timestamp Unix en ms)
+        try:
+            timestamp_ms = int(date_value) if isinstance(date_value, str) else date_value
+            return datetime.fromtimestamp(timestamp_ms / 1000).isoformat()
+        except (ValueError, TypeError):
+            pass
+
+        # Si es un string, intentar parsearlo como ISO
+        if isinstance(date_value, str):
+            try:
+                dt = datetime.fromisoformat(date_value.replace('Z', '+00:00'))
+                return dt.isoformat()
+            except:
+                pass
+
+        print(f"[WARNING] No se pudo parsear fecha: {date_value} (tipo: {type(date_value)})")
+        return None
+
+    except Exception as e:
+        print(f"[ERROR] Error al parsear fecha {date_value}: {str(e)}")
+        return None
+
+
+def parse_date_to_display(date_value):
+    """
+    Convierte una fecha en múltiples formatos a formato display (YYYY-MM-DD HH:MM:SS)
+
+    Returns:
+        String en formato display o datetime.now() si hay error
+    """
+    iso_date = parse_date_flexible(date_value)
+    if iso_date:
+        try:
+            dt = datetime.fromisoformat(iso_date.replace('Z', '+00:00'))
+            return dt.strftime('%Y-%m-%d %H:%M:%S')
+        except:
+            pass
+
+    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+
+
 @app.route('/webhook/clickup', methods=['POST'])
 def webhook_clickup():
     """
@@ -542,10 +610,10 @@ def process_task_event(event_type, data):
         'description': description,
         'priority': priority,
         'assignees': assignees,
-        'date_created': datetime.fromtimestamp(int(date_created) / 1000).isoformat() if date_created else None,
-        'date_updated': datetime.fromtimestamp(int(date_updated) / 1000).isoformat() if date_updated else datetime.now().isoformat(),
-        'due_date': datetime.fromtimestamp(int(due_date) / 1000).isoformat() if due_date else None,
-        'start_date': datetime.fromtimestamp(int(start_date) / 1000).isoformat() if start_date else None,
+        'date_created': parse_date_flexible(date_created),
+        'date_updated': parse_date_flexible(date_updated) or datetime.now().isoformat(),
+        'due_date': parse_date_flexible(due_date),
+        'start_date': parse_date_flexible(start_date),
         'time_estimate': time_estimate,
         'time_spent': time_spent,
         'horas_trabajadas': data.get('horas_trabajadas', 0),
@@ -565,7 +633,7 @@ def process_task_event(event_type, data):
         'estado': estado,
         'estado_texto': data.get('status', 'Sin estado'),
         'url': task_url,
-        'fecha_actualizacion': datetime.fromtimestamp(int(date_updated) / 1000).strftime('%Y-%m-%d %H:%M:%S') if date_updated else datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'fecha_actualizacion': parse_date_to_display(date_updated),
         'event_type': event_type,
         'timestamp_cache': datetime.now().isoformat(),
         'horas_trabajadas': data.get('horas_trabajadas', 0),
