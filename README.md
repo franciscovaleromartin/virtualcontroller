@@ -52,7 +52,6 @@ Edita el archivo `.env` con las siguientes variables:
 
 - `CLICKUP_CLIENT_ID`: ID de tu aplicación OAuth de ClickUp
 - `CLICKUP_CLIENT_SECRET`: Secret de tu aplicación OAuth
-- `REDIRECT_URI`: URL de redirección OAuth (por defecto: https://virtualcontroller.onrender.com)
 - `SMTP_SERVER`: Servidor SMTP para envío de emails (por defecto: smtp.gmail.com)
 - `SMTP_PORT`: Puerto SMTP (por defecto: 587)
 - `SMTP_EMAIL`: Email desde el cual se enviarán las alertas
@@ -64,7 +63,10 @@ Edita el archivo `.env` con las siguientes variables:
 
 1. Ve a https://app.clickup.com/settings/apps
 2. Crea una nueva aplicación OAuth
-3. Configura la URL de redirección con tu dominio
+3. Configura la URL de redirección (Redirect URL):
+   - **Para producción**: `https://virtualcontroller.onrender.com/oauth/callback`
+   - **Para desarrollo local**: `http://localhost:5000/oauth/callback`
+   - **Importante**: La URL debe terminar exactamente con `/oauth/callback`
 4. Copia el Client ID y Client Secret al archivo .env
 
 ### Configuración de Email (Gmail)
