@@ -1,22 +1,19 @@
 """
-Configuración de Gunicorn para Flask-SocketIO con threading
+Configuración de Gunicorn para Flask-SocketIO con gevent
 """
 
 import multiprocessing
 import os
 
-# Número de workers (threads en este caso)
-# Para threading con SocketIO, usar 1 worker
+# Número de workers
+# Para gevent con SocketIO, usar 1 worker para evitar problemas de estado compartido
 workers = 1
 
-# Tipo de worker - threads para Flask-SocketIO con async_mode='threading'
-worker_class = 'sync'
+# Tipo de worker - gevent para Flask-SocketIO con async_mode='gevent'
+worker_class = 'gevent'
 
-# Número de threads por worker
-threads = 4
-
-# Timeout para mantener conexiones WebSocket vivas
-timeout = 120
+# Timeout para mantener conexiones WebSocket vivas (mayor para WebSocket)
+timeout = 300
 
 # Keep alive timeout
 keepalive = 5
