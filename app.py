@@ -9,6 +9,7 @@ import time
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import db  # Importar módulo de base de datos
 
 load_dotenv()
 
@@ -101,21 +102,23 @@ def logout():
 @app.route('/webhook/clickup', methods=['POST'])
 def webhook_clickup():
     """
-    Endpoint para recibir webhooks de make.com con actualizaciones de ClickUp
+    Endpoint para recibir webhooks de ClickUp (directo o vía make.com)
 
-    Formato esperado del payload:
-    {
-        "task_id": "abc123",
-        "task_name": "Nombre de la tarea",
-        "status": "in progress",
-        "date_updated": 1234567890000,
-        "url": "https://app.clickup.com/t/...",
-        "event_type": "taskUpdated" // o "taskCreated", "taskStatusUpdated", etc.
-    }
+    Soporta eventos de ClickUp:
+    - taskCreated, taskUpdated, taskDeleted, taskStatusUpdated
+    - listCreated, listUpdated, listDeleted
+    - folderCreated, folderUpdated, folderDeleted
+    - spaceCreated, spaceUpdated
+
+    Formatos aceptados:
+    1. Webhook directo de ClickUp con estructura estándar
+    2. Webhook desde make.com con formato simplificado
 
     Headers esperados:
-    - X-Webhook-Token: token de seguridad para validar la petición
+    - X-Webhook-Token: token de seguridad
     """
+    webhook_log_id = None
+
     try:
         # Validar token de seguridad
         token_header = request.headers.get('X-Webhook-Token')
@@ -135,100 +138,249 @@ def webhook_clickup():
 
         print(f"[INFO] Webhook recibido: {json.dumps(data, indent=2)}")
 
-        # Extraer información de la tarea
+        # Detectar tipo de evento
+        event_type = data.get('event') or data.get('event_type', 'unknown')
+
+        # Extraer IDs según el tipo de evento
         task_id = data.get('task_id')
-        task_name = data.get('task_name', 'Sin nombre')
-        status = data.get('status', '').lower()
-        date_updated = data.get('date_updated')
-        task_url = data.get('url', '')
-        event_type = data.get('event_type', 'unknown')
+        list_id = data.get('list_id')
+        folder_id = data.get('folder_id')
+        space_id = data.get('space_id')
 
-        if not task_id:
-            print("[ERROR] Webhook sin task_id")
-            return jsonify({'error': 'Bad Request', 'message': 'task_id es requerido'}), 400
+        # Registrar webhook en base de datos
+        webhook_log_id = db.log_webhook(
+            event_type=event_type,
+            payload=data,
+            task_id=task_id,
+            list_id=list_id,
+            folder_id=folder_id,
+            space_id=space_id
+        )
 
-        print(f"[INFO] Procesando evento '{event_type}' para tarea {task_id}: {task_name}")
+        print(f"[INFO] Procesando evento '{event_type}' (webhook_log_id: {webhook_log_id})")
 
-        # Determinar el estado de la tarea
-        estado = 'pendiente'
-        if status in ['complete', 'closed', 'completed']:
-            estado = 'completada'
-        elif 'progress' in status or 'review' in status or 'doing' in status:
-            estado = 'en_progreso'
+        # Procesar según el tipo de evento
+        result = None
 
-        # Guardar en caché
-        tareas_cache[task_id] = {
-            'id': task_id,
-            'nombre': task_name,
-            'estado': estado,
-            'estado_texto': data.get('status', 'Sin estado'),
-            'url': task_url,
-            'fecha_actualizacion': datetime.fromtimestamp(int(date_updated) / 1000).strftime('%Y-%m-%d %H:%M:%S') if date_updated else datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'event_type': event_type,
-            'timestamp_cache': datetime.now().isoformat(),
-            'horas_trabajadas': data.get('horas_trabajadas', 0),
-            'minutos_trabajados': data.get('minutos_trabajados', 0),
-            'raw_data': data  # Guardar datos completos por si acaso
-        }
+        if 'task' in event_type.lower():
+            result = process_task_event(event_type, data)
+        elif 'list' in event_type.lower():
+            result = process_list_event(event_type, data)
+        elif 'folder' in event_type.lower():
+            result = process_folder_event(event_type, data)
+        elif 'space' in event_type.lower():
+            result = process_space_event(event_type, data)
+        else:
+            print(f"[WARNING] Tipo de evento no reconocido: {event_type}")
+            result = {'status': 'ignored', 'message': 'Evento no soportado'}
 
-        print(f"[INFO] Tarea {task_id} actualizada en caché: estado={estado}, fecha={tareas_cache[task_id]['fecha_actualizacion']}")
-
-        # Si la tarea tiene alerta configurada, verificar si necesita notificación
-        if task_id in alertas_tareas and alertas_tareas[task_id].get('aviso_activado'):
-            print(f"[INFO] Tarea {task_id} tiene alerta configurada, verificando...")
-            try:
-                config_alerta = alertas_tareas[task_id]
-                fecha_actualizacion = datetime.fromtimestamp(int(date_updated) / 1000) if date_updated else datetime.now()
-                tiempo_transcurrido = datetime.now() - fecha_actualizacion
-
-                tiempo_alerta = timedelta(
-                    hours=config_alerta.get('aviso_horas', 0),
-                    minutes=config_alerta.get('aviso_minutos', 0)
-                )
-
-                if tiempo_transcurrido >= tiempo_alerta:
-                    ultimo_envio = config_alerta.get('ultimo_envio_email')
-                    if ultimo_envio:
-                        ultimo_envio_dt = datetime.fromisoformat(ultimo_envio)
-                        if datetime.now() - ultimo_envio_dt >= timedelta(days=1):
-                            # Enviar email
-                            email_destino = config_alerta.get('email_aviso')
-                            if email_destino:
-                                horas = int(tiempo_transcurrido.total_seconds() // 3600)
-                                minutos = int((tiempo_transcurrido.total_seconds() % 3600) // 60)
-                                tiempo_sin_act = f"{horas} horas y {minutos} minutos"
-
-                                if enviar_email_alerta(email_destino, task_name, task_url, tiempo_sin_act):
-                                    alertas_tareas[task_id]['ultimo_envio_email'] = datetime.now().isoformat()
-                                    print(f"[INFO] Email de alerta enviado para tarea {task_id}")
-                    else:
-                        # Primera vez, enviar email
-                        email_destino = config_alerta.get('email_aviso')
-                        if email_destino:
-                            horas = int(tiempo_transcurrido.total_seconds() // 3600)
-                            minutos = int((tiempo_transcurrido.total_seconds() % 3600) // 60)
-                            tiempo_sin_act = f"{horas} horas y {minutos} minutos"
-
-                            if enviar_email_alerta(email_destino, task_name, task_url, tiempo_sin_act):
-                                alertas_tareas[task_id]['ultimo_envio_email'] = datetime.now().isoformat()
-                                print(f"[INFO] Email de alerta enviado para tarea {task_id}")
-
-            except Exception as e:
-                print(f"[ERROR] Error al verificar alerta para tarea {task_id}: {str(e)}")
+        # Marcar webhook como procesado
+        db.mark_webhook_processed(webhook_log_id, error=None)
 
         return jsonify({
             'success': True,
-            'message': 'Webhook procesado correctamente',
-            'task_id': task_id,
-            'estado': estado,
+            'event_type': event_type,
+            'result': result,
             'timestamp': datetime.now().isoformat()
         }), 200
 
     except Exception as e:
-        print(f"[ERROR] Error al procesar webhook: {str(e)}")
+        error_msg = str(e)
+        print(f"[ERROR] Error al procesar webhook: {error_msg}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': 'Internal Server Error', 'message': str(e)}), 500
+
+        # Marcar webhook como error si se registró
+        if webhook_log_id:
+            db.mark_webhook_processed(webhook_log_id, error=error_msg)
+
+        return jsonify({'error': 'Internal Server Error', 'message': error_msg}), 500
+
+
+def process_task_event(event_type, data):
+    """Procesa eventos relacionados con tareas"""
+    task_id = data.get('task_id')
+
+    if not task_id:
+        print("[WARNING] Evento de tarea sin task_id")
+        return {'status': 'error', 'message': 'task_id requerido'}
+
+    if event_type in ['taskDeleted', 'taskDeleted']:
+        # Eliminar tarea de la base de datos
+        db.delete_task(task_id)
+        # Eliminar del caché
+        if task_id in tareas_cache:
+            del tareas_cache[task_id]
+        print(f"[INFO] Tarea {task_id} eliminada")
+        return {'status': 'deleted', 'task_id': task_id}
+
+    # Para taskCreated, taskUpdated, taskStatusUpdated
+    task_name = data.get('task_name') or data.get('name', 'Sin nombre')
+    status = data.get('status', '').lower()
+    date_updated = data.get('date_updated') or data.get('date_updated_unix')
+    task_url = data.get('url', '')
+    list_id = data.get('list_id')
+    description = data.get('description', '')
+    priority = data.get('priority')
+    assignees = data.get('assignees', [])
+    date_created = data.get('date_created')
+    due_date = data.get('due_date')
+    start_date = data.get('start_date')
+    time_estimate = data.get('time_estimate')
+    time_spent = data.get('time_spent')
+    tags = data.get('tags', [])
+    custom_fields = data.get('custom_fields', [])
+
+    # Determinar el estado de la tarea
+    estado = 'pendiente'
+    if status in ['complete', 'closed', 'completed']:
+        estado = 'completada'
+    elif 'progress' in status or 'review' in status or 'doing' in status:
+        estado = 'en_progreso'
+
+    # Preparar datos de tarea para guardar en BD
+    task_data = {
+        'id': task_id,
+        'name': task_name,
+        'list_id': list_id,
+        'status': estado,
+        'status_text': data.get('status', 'Sin estado'),
+        'url': task_url,
+        'description': description,
+        'priority': priority,
+        'assignees': assignees,
+        'date_created': datetime.fromtimestamp(int(date_created) / 1000).isoformat() if date_created else None,
+        'date_updated': datetime.fromtimestamp(int(date_updated) / 1000).isoformat() if date_updated else datetime.now().isoformat(),
+        'due_date': datetime.fromtimestamp(int(due_date) / 1000).isoformat() if due_date else None,
+        'start_date': datetime.fromtimestamp(int(start_date) / 1000).isoformat() if start_date else None,
+        'time_estimate': time_estimate,
+        'time_spent': time_spent,
+        'horas_trabajadas': data.get('horas_trabajadas', 0),
+        'minutos_trabajados': data.get('minutos_trabajados', 0),
+        'tags': tags,
+        'custom_fields': custom_fields,
+        'metadata': data
+    }
+
+    # Guardar en base de datos
+    db.save_task(task_data)
+
+    # Guardar en caché para acceso rápido
+    tareas_cache[task_id] = {
+        'id': task_id,
+        'nombre': task_name,
+        'estado': estado,
+        'estado_texto': data.get('status', 'Sin estado'),
+        'url': task_url,
+        'fecha_actualizacion': datetime.fromtimestamp(int(date_updated) / 1000).strftime('%Y-%m-%d %H:%M:%S') if date_updated else datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'event_type': event_type,
+        'timestamp_cache': datetime.now().isoformat(),
+        'horas_trabajadas': data.get('horas_trabajadas', 0),
+        'minutos_trabajados': data.get('minutos_trabajados', 0),
+    }
+
+    print(f"[INFO] Tarea {task_id} guardada en BD y caché: {task_name}")
+
+    # Verificar alertas si está configurada
+    alert = db.get_task_alert(task_id)
+    if alert and alert.get('aviso_activado'):
+        check_and_send_alert(task_id, task_name, task_url, date_updated, alert)
+
+    return {'status': 'saved', 'task_id': task_id, 'name': task_name}
+
+
+def process_list_event(event_type, data):
+    """Procesa eventos relacionados con listas"""
+    list_id = data.get('list_id')
+    if not list_id:
+        return {'status': 'error', 'message': 'list_id requerido'}
+
+    list_name = data.get('list_name') or data.get('name', 'Sin nombre')
+    space_id = data.get('space_id')
+    folder_id = data.get('folder_id')
+    archived = data.get('archived', False)
+
+    if event_type == 'listDeleted':
+        # Eliminar lista (esto también eliminará las tareas asociadas por CASCADE)
+        print(f"[INFO] Lista {list_id} eliminada")
+        # La eliminación se manejará cuando se sincronice con la API
+        return {'status': 'deleted', 'list_id': list_id}
+
+    # Guardar lista en BD
+    db.save_list(list_id, list_name, space_id, folder_id, archived, metadata=data)
+    print(f"[INFO] Lista {list_id} guardada: {list_name}")
+
+    return {'status': 'saved', 'list_id': list_id, 'name': list_name}
+
+
+def process_folder_event(event_type, data):
+    """Procesa eventos relacionados con carpetas"""
+    folder_id = data.get('folder_id')
+    if not folder_id:
+        return {'status': 'error', 'message': 'folder_id requerido'}
+
+    folder_name = data.get('folder_name') or data.get('name', 'Sin nombre')
+    space_id = data.get('space_id')
+    hidden = data.get('hidden', False)
+
+    db.save_folder(folder_id, folder_name, space_id, hidden, metadata=data)
+    print(f"[INFO] Carpeta {folder_id} guardada: {folder_name}")
+
+    return {'status': 'saved', 'folder_id': folder_id, 'name': folder_name}
+
+
+def process_space_event(event_type, data):
+    """Procesa eventos relacionados con espacios"""
+    space_id = data.get('space_id')
+    if not space_id:
+        return {'status': 'error', 'message': 'space_id requerido'}
+
+    space_name = data.get('space_name') or data.get('name', 'Sin nombre')
+    team_id = data.get('team_id')
+
+    db.save_space(space_id, space_name, team_id, metadata=data)
+    print(f"[INFO] Espacio {space_id} guardado: {space_name}")
+
+    return {'status': 'saved', 'space_id': space_id, 'name': space_name}
+
+
+def check_and_send_alert(task_id, task_name, task_url, date_updated, alert_config):
+    """Verifica y envía alerta si es necesario"""
+    try:
+        fecha_actualizacion = datetime.fromtimestamp(int(date_updated) / 1000) if date_updated else datetime.now()
+        tiempo_transcurrido = datetime.now() - fecha_actualizacion
+
+        tiempo_alerta = timedelta(
+            hours=alert_config.get('aviso_horas', 0),
+            minutes=alert_config.get('aviso_minutos', 0)
+        )
+
+        if tiempo_transcurrido >= tiempo_alerta:
+            # Verificar último envío
+            ultimo_envio = alert_config.get('ultimo_envio_email')
+            if ultimo_envio:
+                # Parsear timestamp de SQLite
+                try:
+                    ultimo_envio_dt = datetime.fromisoformat(ultimo_envio.replace('Z', '+00:00'))
+                except:
+                    ultimo_envio_dt = datetime.now() - timedelta(days=2)  # Forzar envío
+
+                if datetime.now() - ultimo_envio_dt < timedelta(days=1):
+                    return  # No enviar, ya se envió hace menos de 1 día
+
+            # Enviar email
+            email_destino = alert_config.get('email_aviso')
+            if email_destino:
+                horas = int(tiempo_transcurrido.total_seconds() // 3600)
+                minutos = int((tiempo_transcurrido.total_seconds() % 3600) // 60)
+                tiempo_sin_act = f"{horas} horas y {minutos} minutos"
+
+                if enviar_email_alerta(email_destino, task_name, task_url, tiempo_sin_act):
+                    db.update_alert_last_sent(task_id)
+                    print(f"[INFO] Email de alerta enviado para tarea {task_id}")
+
+    except Exception as e:
+        print(f"[ERROR] Error al verificar alerta para tarea {task_id}: {str(e)}")
 
 @app.route('/api/webhook/tasks/cache', methods=['GET'])
 def obtener_cache_tareas():
@@ -282,6 +434,24 @@ def limpiar_cache_tareas():
 
     except Exception as e:
         print(f"[ERROR] Error al limpiar caché: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/webhook/stats', methods=['GET'])
+def obtener_stats_webhooks():
+    """
+    Endpoint para obtener estadísticas de webhooks procesados
+    """
+    try:
+        stats = db.get_webhook_stats()
+
+        return jsonify({
+            'success': True,
+            'stats': stats,
+            'timestamp': datetime.now().isoformat()
+        }), 200
+
+    except Exception as e:
+        print(f"[ERROR] Error al obtener estadísticas: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 def get_headers():
@@ -711,7 +881,10 @@ def guardar_alerta_tarea():
         aviso_horas = int(data.get('aviso_horas', 0))
         aviso_minutos = int(data.get('aviso_minutos', 0))
 
-        # Guardar en el diccionario en memoria
+        # Guardar en base de datos
+        db.save_task_alert(tarea_id, aviso_activado, email_aviso, aviso_horas, aviso_minutos)
+
+        # Mantener también en memoria para compatibilidad
         alertas_tareas[tarea_id] = {
             'aviso_activado': aviso_activado,
             'email_aviso': email_aviso,
@@ -720,7 +893,7 @@ def guardar_alerta_tarea():
             'ultima_actualizacion': datetime.now().isoformat()
         }
 
-        print(f"[INFO] Alerta guardada para tarea {tarea_id}: {alertas_tareas[tarea_id]}")
+        print(f"[INFO] Alerta guardada para tarea {tarea_id} en BD y memoria")
 
         return jsonify({'success': True, 'message': 'Alerta guardada correctamente'})
 
@@ -732,12 +905,22 @@ def guardar_alerta_tarea():
 def obtener_alerta_tarea_endpoint(tarea_id):
     """Obtiene la configuración de alerta para una tarea específica"""
     try:
-        alerta = alertas_tareas.get(tarea_id, {
-            'aviso_activado': False,
-            'email_aviso': '',
-            'aviso_horas': 0,
-            'aviso_minutos': 0
-        })
+        # Intentar obtener de la base de datos primero
+        alerta = db.get_task_alert(tarea_id)
+
+        if not alerta:
+            # Si no está en BD, intentar de memoria (migración)
+            alerta = alertas_tareas.get(tarea_id)
+
+        if not alerta:
+            # Si no existe, devolver valores por defecto
+            alerta = {
+                'aviso_activado': False,
+                'email_aviso': '',
+                'aviso_horas': 0,
+                'aviso_minutos': 0
+            }
+
         return jsonify(alerta)
     except Exception as e:
         print(f"[ERROR] Error al obtener alerta de tarea: {str(e)}")

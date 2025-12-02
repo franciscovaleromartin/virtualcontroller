@@ -58,6 +58,7 @@ Edita el archivo `.env` con las siguientes variables:
 - `SMTP_EMAIL`: Email desde el cual se enviarán las alertas
 - `SMTP_PASSWORD`: Contraseña del email (se recomienda usar App Password de Gmail)
 - `WEBHOOK_SECRET_TOKEN`: Token de seguridad para validar webhooks de make.com (opcional pero recomendado)
+- `DATABASE_PATH`: Ruta al archivo de base de datos SQLite (por defecto: virtualcontroller.db)
 
 ### Configuración de ClickUp OAuth
 
@@ -95,7 +96,13 @@ Para usar Gmail como servidor SMTP:
 
 ### Integración con Webhooks (Make.com)
 
-El sistema incluye un endpoint webhook que permite recibir actualizaciones en tiempo real desde ClickUp a través de make.com:
+El sistema incluye un endpoint webhook robusto que permite recibir actualizaciones en tiempo real desde ClickUp (directamente o a través de make.com).
+
+**Eventos soportados:**
+- `taskCreated`, `taskUpdated`, `taskDeleted`, `taskStatusUpdated`
+- `listCreated`, `listUpdated`, `listDeleted`
+- `folderCreated`, `folderUpdated`, `folderDeleted`
+- `spaceCreated`, `spaceUpdated`
 
 #### Configuración del Webhook
 
@@ -150,10 +157,16 @@ El webhook espera recibir un JSON con el siguiente formato:
 
 #### Endpoints del Webhook
 
-- **POST /webhook/clickup**: Recibe actualizaciones de tareas desde make.com
-- **GET /api/webhook/tasks/cache**: Consulta el caché de tareas actualizadas vía webhook
+- **POST /webhook/clickup**: Recibe y procesa webhooks de ClickUp
+  - Guarda eventos en base de datos
+  - Actualiza automáticamente spaces, folders, lists y tasks
+  - Procesa alertas configuradas
+- **GET /api/webhook/tasks/cache**: Consulta el caché en memoria de tareas actualizadas
   - Parámetro opcional: `?task_id=abc123` para obtener una tarea específica
-- **DELETE /api/webhook/tasks/cache**: Limpia el caché de tareas (útil para testing)
+- **DELETE /api/webhook/tasks/cache**: Limpia el caché en memoria (útil para testing)
+- **GET /api/webhook/stats**: Obtiene estadísticas de webhooks procesados
+  - Muestra total de eventos por tipo
+  - Cuenta eventos procesados correctamente y con errores
 
 #### Ventajas del Webhook
 
@@ -161,6 +174,31 @@ El webhook espera recibir un JSON con el siguiente formato:
 - ✅ Menor uso de la API de ClickUp
 - ✅ Alertas instantáneas cuando las tareas cambian
 - ✅ Caché local de tareas para consultas rápidas
+- ✅ Persistencia de datos en base de datos SQLite
+
+### Persistencia de Datos
+
+El sistema utiliza SQLite para almacenar todos los datos de forma persistente:
+
+**Tablas principales:**
+- `spaces`: Espacios de ClickUp
+- `folders`: Carpetas dentro de espacios
+- `lists`: Listas de tareas
+- `tasks`: Tareas con toda su información (estado, fechas, tiempos, etc.)
+- `task_alerts`: Configuración de alertas por tarea
+- `webhooks_log`: Log de todos los webhooks recibidos para auditoría
+
+**Características:**
+- ✅ Datos persisten entre reinicios del servidor
+- ✅ Sincronización automática con webhooks de ClickUp
+- ✅ Log completo de eventos para debugging
+- ✅ Estadísticas de webhooks procesados
+- ✅ Relaciones entre tablas con CASCADE para integridad de datos
+
+**Ubicación del archivo:**
+- El archivo de base de datos se crea en la ruta especificada en `DATABASE_PATH` (por defecto: `virtualcontroller.db`)
+- Se inicializa automáticamente al arrancar la aplicación
+- No requiere configuración manual
 
 ### Cómo Funcionan las Alertas
 
@@ -173,18 +211,21 @@ El webhook espera recibir un JSON con el siguiente formato:
 
 ```
 virtualcontroller/
-├── app.py                 # Aplicación Flask principal
+├── app.py                    # Aplicación Flask principal
+├── db.py                     # Módulo de persistencia con SQLite
 ├── templates/
-│   └── index.html        # Interfaz de usuario
-├── .env                  # Variables de entorno (no incluido en git)
-├── .env.example          # Plantilla de variables de entorno
-├── requirements.txt      # Dependencias Python
-└── README.md            # Este archivo
+│   └── index.html           # Interfaz de usuario
+├── .env                     # Variables de entorno (no incluido en git)
+├── .env.example             # Plantilla de variables de entorno
+├── requirements.txt         # Dependencias Python
+├── virtualcontroller.db     # Base de datos SQLite (generado automáticamente)
+└── README.md               # Este archivo
 ```
 
 ## Notas Técnicas
 
-- Las configuraciones de alertas se almacenan en memoria durante la ejecución
+- **Persistencia de datos**: Todos los datos (tareas, alertas, webhooks) se almacenan en SQLite
+- **Caché en memoria**: Se mantiene un caché adicional para acceso ultra-rápido a tareas recientes
 - El tiempo trabajado se calcula **solo cuando la tarea está en estado "In Progress"**:
   - El sistema analiza el historial de cambios de estado de cada tarea
   - Suma todos los períodos en los que la tarea estuvo en "In Progress"
