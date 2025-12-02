@@ -585,10 +585,10 @@ def process_task_event(event_type, data):
         socketio.emit('task_deleted', {
             'task_id': task_id,
             'list_id': list_id_deleted
-        }, namespace='/')
+        }, namespace='/', broadcast=True)
 
         print(f"[INFO] Tarea {task_id} eliminada")
-        print(f"[INFO] Evento WebSocket 'task_deleted' emitido para tarea {task_id}")
+        print(f"[INFO] Evento WebSocket 'task_deleted' emitido (broadcast) para tarea {task_id}")
         return {'status': 'deleted', 'task_id': task_id}
 
     # Para taskCreated, taskUpdated, taskStatusUpdated
@@ -674,20 +674,20 @@ def process_task_event(event_type, data):
 
     print(f"[INFO] Tarea {task_id} guardada en BD y caché: {task_name}")
 
-    # Emitir evento WebSocket según el tipo de evento
+    # Emitir evento WebSocket según el tipo de evento (broadcast a todos los clientes)
     if event_type == 'taskCreated':
         socketio.emit('task_created', {
             'task_id': task_id,
             'task': tareas_cache[task_id],
             'list_id': list_id
-        }, namespace='/')
-        print(f"[INFO] Evento WebSocket 'task_created' emitido para tarea {task_id}")
+        }, namespace='/', broadcast=True)
+        print(f"[INFO] Evento WebSocket 'task_created' emitido (broadcast) para tarea {task_id}")
     elif event_type == 'taskDeleted':
         socketio.emit('task_deleted', {
             'task_id': task_id,
             'list_id': list_id
-        }, namespace='/')
-        print(f"[INFO] Evento WebSocket 'task_deleted' emitido para tarea {task_id}")
+        }, namespace='/', broadcast=True)
+        print(f"[INFO] Evento WebSocket 'task_deleted' emitido (broadcast) para tarea {task_id}")
     elif event_type in ['taskUpdated', 'taskStatusUpdated']:
         socketio.emit('task_updated', {
             'task_id': task_id,
@@ -696,8 +696,8 @@ def process_task_event(event_type, data):
             'status_changed': old_status != estado,
             'old_status': old_status,
             'new_status': estado
-        }, namespace='/')
-        print(f"[INFO] Evento WebSocket 'task_updated' emitido para tarea {task_id}")
+        }, namespace='/', broadcast=True)
+        print(f"[INFO] Evento WebSocket 'task_updated' emitido (broadcast) para tarea {task_id}")
 
     # Verificar alertas si está configurada
     alert = db.get_task_alert(task_id)
@@ -724,10 +724,10 @@ def process_list_event(event_type, data):
             'project_id': list_id,
             'project_type': 'list',
             'space_id': space_id
-        }, namespace='/')
+        }, namespace='/', broadcast=True)
 
         print(f"[INFO] Lista {list_id} eliminada")
-        print(f"[INFO] Evento WebSocket 'project_deleted' emitido para lista {list_id}")
+        print(f"[INFO] Evento WebSocket 'project_deleted' emitido (broadcast) para lista {list_id}")
         return {'status': 'deleted', 'list_id': list_id}
 
     # Guardar lista en BD
@@ -743,8 +743,8 @@ def process_list_event(event_type, data):
         'space_id': space_id,
         'folder_id': folder_id,
         'archived': archived
-    }, namespace='/')
-    print(f"[INFO] Evento WebSocket '{event_name}' emitido para lista {list_id}")
+    }, namespace='/', broadcast=True)
+    print(f"[INFO] Evento WebSocket '{event_name}' emitido (broadcast) para lista {list_id}")
 
     return {'status': 'saved', 'list_id': list_id, 'name': list_name}
 
@@ -765,10 +765,10 @@ def process_folder_event(event_type, data):
             'project_id': folder_id,
             'project_type': 'folder',
             'space_id': space_id
-        }, namespace='/')
+        }, namespace='/', broadcast=True)
 
         print(f"[INFO] Carpeta {folder_id} eliminada")
-        print(f"[INFO] Evento WebSocket 'project_deleted' emitido para carpeta {folder_id}")
+        print(f"[INFO] Evento WebSocket 'project_deleted' emitido (broadcast) para carpeta {folder_id}")
         return {'status': 'deleted', 'folder_id': folder_id}
 
     db.save_folder(folder_id, folder_name, space_id, hidden, metadata=data)
@@ -782,8 +782,8 @@ def process_folder_event(event_type, data):
         'project_name': folder_name,
         'space_id': space_id,
         'hidden': hidden
-    }, namespace='/')
-    print(f"[INFO] Evento WebSocket '{event_name}' emitido para carpeta {folder_id}")
+    }, namespace='/', broadcast=True)
+    print(f"[INFO] Evento WebSocket '{event_name}' emitido (broadcast) para carpeta {folder_id}")
 
     return {'status': 'saved', 'folder_id': folder_id, 'name': folder_name}
 
@@ -801,10 +801,10 @@ def process_space_event(event_type, data):
         # Emitir evento WebSocket
         socketio.emit('space_deleted', {
             'space_id': space_id
-        }, namespace='/')
+        }, namespace='/', broadcast=True)
 
         print(f"[INFO] Espacio {space_id} eliminado")
-        print(f"[INFO] Evento WebSocket 'space_deleted' emitido para espacio {space_id}")
+        print(f"[INFO] Evento WebSocket 'space_deleted' emitido (broadcast) para espacio {space_id}")
         return {'status': 'deleted', 'space_id': space_id}
 
     db.save_space(space_id, space_name, team_id, metadata=data)
@@ -816,8 +816,8 @@ def process_space_event(event_type, data):
         'space_id': space_id,
         'space_name': space_name,
         'team_id': team_id
-    }, namespace='/')
-    print(f"[INFO] Evento WebSocket '{event_name}' emitido para espacio {space_id}")
+    }, namespace='/', broadcast=True)
+    print(f"[INFO] Evento WebSocket '{event_name}' emitido (broadcast) para espacio {space_id}")
 
     return {'status': 'saved', 'space_id': space_id, 'name': space_name}
 
@@ -986,7 +986,7 @@ def get_spaces():
 
 @app.route('/api/space/<space_id>/projects')
 def get_projects(space_id):
-    """Obtiene todas las carpetas y listas de un espacio"""
+    """Obtiene todas las carpetas y listas de un espacio desde la base de datos"""
     try:
         headers = get_headers()
         if not headers:
@@ -994,7 +994,59 @@ def get_projects(space_id):
 
         proyectos = []
 
-        # Obtener folders del space
+        # Obtener folders de la base de datos
+        folders = db.get_folders_by_space(space_id)
+
+        for folder in folders:
+            # Añadir el folder como proyecto
+            proyectos.append({
+                'id': f'folder_{folder["id"]}',
+                'name': f'📁 {folder["name"]}',
+                'type': 'folder',
+                'folder_id': folder['id']
+            })
+
+            # Obtener las listas dentro de cada folder desde la BD
+            folder_lists = db.get_lists_by_folder(folder['id'])
+            for lista in folder_lists:
+                if not lista.get('archived'):
+                    proyectos.append({
+                        'id': f'list_{lista["id"]}',
+                        'name': f'  📄 {lista["name"]}',
+                        'type': 'list',
+                        'list_id': lista['id']
+                    })
+
+        # Obtener listas sin folder (directamente en el space) desde la BD
+        space_lists = db.get_lists_by_space(space_id)
+        for lista in space_lists:
+            # Solo incluir listas que no tienen folder_id
+            if not lista.get('folder_id') and not lista.get('archived'):
+                proyectos.append({
+                    'id': f'list_{lista["id"]}',
+                    'name': f'📄 {lista["name"]}',
+                    'type': 'list',
+                    'list_id': lista['id']
+                })
+
+        # Si no hay proyectos en la BD, sincronizar desde la API
+        if not proyectos:
+            print(f"[INFO] No hay proyectos en BD para space {space_id}, sincronizando desde API...")
+            return sync_projects_from_api(space_id, headers)
+
+        return jsonify({'projects': proyectos})
+
+    except Exception as e:
+        print(f"[ERROR] Error al obtener proyectos: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+def sync_projects_from_api(space_id, headers):
+    """Sincroniza proyectos desde la API de ClickUp y los guarda en la BD"""
+    try:
+        proyectos = []
+
+        # Obtener folders del space desde la API
         folders_response = requests.get(
             f'https://api.clickup.com/api/v2/space/{space_id}/folder',
             headers=headers,
@@ -1004,7 +1056,9 @@ def get_projects(space_id):
         if folders_response.status_code == 200:
             folders = folders_response.json()['folders']
             for folder in folders:
-                # Añadir el folder como proyecto
+                # Guardar folder en BD
+                db.save_folder(folder['id'], folder['name'], space_id, folder.get('hidden', False), metadata=folder)
+
                 proyectos.append({
                     'id': f'folder_{folder["id"]}',
                     'name': f'📁 {folder["name"]}',
@@ -1020,6 +1074,10 @@ def get_projects(space_id):
                 )
                 if folder_lists_response.status_code == 200:
                     for lista in folder_lists_response.json()['lists']:
+                        # Guardar lista en BD
+                        db.save_list(lista['id'], lista['name'], space_id, folder['id'],
+                                   lista.get('archived', False), metadata=lista)
+
                         proyectos.append({
                             'id': f'list_{lista["id"]}',
                             'name': f'  📄 {lista["name"]}',
@@ -1037,6 +1095,10 @@ def get_projects(space_id):
         if lists_response.status_code == 200:
             listas = lists_response.json()['lists']
             for lista in listas:
+                # Guardar lista en BD
+                db.save_list(lista['id'], lista['name'], space_id, None,
+                           lista.get('archived', False), metadata=lista)
+
                 proyectos.append({
                     'id': f'list_{lista["id"]}',
                     'name': f'📄 {lista["name"]}',
@@ -1044,9 +1106,11 @@ def get_projects(space_id):
                     'list_id': lista['id']
                 })
 
+        print(f"[INFO] Proyectos sincronizados desde API para space {space_id}")
         return jsonify({'projects': proyectos})
 
     except Exception as e:
+        print(f"[ERROR] Error al sincronizar proyectos: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/project/<project_type>/<project_id>/tasks')
