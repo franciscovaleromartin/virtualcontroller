@@ -18,7 +18,6 @@ app.secret_key = os.urandom(24)
 
 CLICKUP_CLIENT_ID = os.getenv('CLICKUP_CLIENT_ID')
 CLICKUP_CLIENT_SECRET = os.getenv('CLICKUP_CLIENT_SECRET')
-REDIRECT_URI = os.getenv('REDIRECT_URI', 'https://virtualcontroller.onrender.com')
 
 # Configuración de email para alertas
 SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
@@ -41,20 +40,25 @@ tareas_cache = {}
 
 @app.route('/')
 def inicio():
-    code = request.args.get('code')
-
-    print(f"[DEBUG] Ruta '/' accedida. Code presente: {bool(code)}")
-
-    if code:
-        print(f"[DEBUG] Procesando OAuth callback...")
-        return handle_oauth_callback(code)
-
     if 'access_token' not in session:
         print(f"[DEBUG] No hay access_token, redirigiendo a login")
         return redirect(url_for('login'))
 
     print(f"[DEBUG] Usuario autenticado, mostrando página principal")
     return render_template('index.html')
+
+@app.route('/oauth/callback')
+def oauth_callback():
+    """Endpoint de callback de OAuth de ClickUp"""
+    code = request.args.get('code')
+
+    print(f"[DEBUG] OAuth callback accedido. Code presente: {bool(code)}")
+
+    if not code:
+        print(f"[ERROR] No se recibió código de autorización")
+        return "Error: No se recibió código de autorización de ClickUp. Verifica la configuración de Redirect URL en ClickUp.", 400
+
+    return handle_oauth_callback(code)
 
 def handle_oauth_callback(code):
     print(f"[DEBUG] OAuth callback recibido con código: {code[:10]}...")
@@ -102,7 +106,16 @@ def handle_oauth_callback(code):
 
 @app.route('/login')
 def login():
-    auth_url = f"https://app.clickup.com/api?client_id={CLICKUP_CLIENT_ID}&redirect_uri={REDIRECT_URI}"
+    # Validar que las variables de entorno estén configuradas
+    if not CLICKUP_CLIENT_ID:
+        return "Error: CLICKUP_CLIENT_ID no está configurado en .env", 500
+
+    # Construir la URL de callback completa
+    callback_url = url_for('oauth_callback', _external=True)
+
+    print(f"[DEBUG] Callback URL generada: {callback_url}")
+
+    auth_url = f"https://app.clickup.com/api?client_id={CLICKUP_CLIENT_ID}&redirect_uri={callback_url}"
     print(f"[DEBUG] Redirigiendo a ClickUp OAuth: {auth_url}")
     return redirect(auth_url)
 
