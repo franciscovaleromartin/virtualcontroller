@@ -25,11 +25,18 @@ SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
 SMTP_EMAIL = os.getenv('SMTP_EMAIL', '')
 SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '')
 
+# Configuración de webhook
+WEBHOOK_SECRET_TOKEN = os.getenv('WEBHOOK_SECRET_TOKEN', '')
+
 # Almacenamiento en memoria de alertas por tarea
 # Estructura: {tarea_id: {aviso_activado, email_aviso, aviso_horas, aviso_minutos, ultima_actualizacion, ultimo_envio_email}}
 alertas_tareas = {}
 
 alertas_config = {}
+
+# Caché de tareas actualizado vía webhook
+# Estructura: {tarea_id: {datos_tarea, timestamp_actualizacion}}
+tareas_cache = {}
 
 @app.route('/')
 def inicio():
@@ -90,6 +97,192 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for('login'))
+
+@app.route('/webhook/clickup', methods=['POST'])
+def webhook_clickup():
+    """
+    Endpoint para recibir webhooks de make.com con actualizaciones de ClickUp
+
+    Formato esperado del payload:
+    {
+        "task_id": "abc123",
+        "task_name": "Nombre de la tarea",
+        "status": "in progress",
+        "date_updated": 1234567890000,
+        "url": "https://app.clickup.com/t/...",
+        "event_type": "taskUpdated" // o "taskCreated", "taskStatusUpdated", etc.
+    }
+
+    Headers esperados:
+    - X-Webhook-Token: token de seguridad para validar la petición
+    """
+    try:
+        # Validar token de seguridad
+        token_header = request.headers.get('X-Webhook-Token')
+        token_query = request.args.get('token')
+
+        if not WEBHOOK_SECRET_TOKEN:
+            print("[WARNING] WEBHOOK_SECRET_TOKEN no está configurado. Se aceptan todos los webhooks.")
+        elif token_header != WEBHOOK_SECRET_TOKEN and token_query != WEBHOOK_SECRET_TOKEN:
+            print(f"[ERROR] Token inválido en webhook. Header: {token_header}, Query: {token_query}")
+            return jsonify({'error': 'Unauthorized', 'message': 'Token inválido'}), 401
+
+        # Obtener datos del webhook
+        data = request.json
+        if not data:
+            print("[ERROR] Webhook recibido sin datos JSON")
+            return jsonify({'error': 'Bad Request', 'message': 'No se recibieron datos'}), 400
+
+        print(f"[INFO] Webhook recibido: {json.dumps(data, indent=2)}")
+
+        # Extraer información de la tarea
+        task_id = data.get('task_id')
+        task_name = data.get('task_name', 'Sin nombre')
+        status = data.get('status', '').lower()
+        date_updated = data.get('date_updated')
+        task_url = data.get('url', '')
+        event_type = data.get('event_type', 'unknown')
+
+        if not task_id:
+            print("[ERROR] Webhook sin task_id")
+            return jsonify({'error': 'Bad Request', 'message': 'task_id es requerido'}), 400
+
+        print(f"[INFO] Procesando evento '{event_type}' para tarea {task_id}: {task_name}")
+
+        # Determinar el estado de la tarea
+        estado = 'pendiente'
+        if status in ['complete', 'closed', 'completed']:
+            estado = 'completada'
+        elif 'progress' in status or 'review' in status or 'doing' in status:
+            estado = 'en_progreso'
+
+        # Guardar en caché
+        tareas_cache[task_id] = {
+            'id': task_id,
+            'nombre': task_name,
+            'estado': estado,
+            'estado_texto': data.get('status', 'Sin estado'),
+            'url': task_url,
+            'fecha_actualizacion': datetime.fromtimestamp(int(date_updated) / 1000).strftime('%Y-%m-%d %H:%M:%S') if date_updated else datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'event_type': event_type,
+            'timestamp_cache': datetime.now().isoformat(),
+            'horas_trabajadas': data.get('horas_trabajadas', 0),
+            'minutos_trabajados': data.get('minutos_trabajados', 0),
+            'raw_data': data  # Guardar datos completos por si acaso
+        }
+
+        print(f"[INFO] Tarea {task_id} actualizada en caché: estado={estado}, fecha={tareas_cache[task_id]['fecha_actualizacion']}")
+
+        # Si la tarea tiene alerta configurada, verificar si necesita notificación
+        if task_id in alertas_tareas and alertas_tareas[task_id].get('aviso_activado'):
+            print(f"[INFO] Tarea {task_id} tiene alerta configurada, verificando...")
+            try:
+                config_alerta = alertas_tareas[task_id]
+                fecha_actualizacion = datetime.fromtimestamp(int(date_updated) / 1000) if date_updated else datetime.now()
+                tiempo_transcurrido = datetime.now() - fecha_actualizacion
+
+                tiempo_alerta = timedelta(
+                    hours=config_alerta.get('aviso_horas', 0),
+                    minutes=config_alerta.get('aviso_minutos', 0)
+                )
+
+                if tiempo_transcurrido >= tiempo_alerta:
+                    ultimo_envio = config_alerta.get('ultimo_envio_email')
+                    if ultimo_envio:
+                        ultimo_envio_dt = datetime.fromisoformat(ultimo_envio)
+                        if datetime.now() - ultimo_envio_dt >= timedelta(days=1):
+                            # Enviar email
+                            email_destino = config_alerta.get('email_aviso')
+                            if email_destino:
+                                horas = int(tiempo_transcurrido.total_seconds() // 3600)
+                                minutos = int((tiempo_transcurrido.total_seconds() % 3600) // 60)
+                                tiempo_sin_act = f"{horas} horas y {minutos} minutos"
+
+                                if enviar_email_alerta(email_destino, task_name, task_url, tiempo_sin_act):
+                                    alertas_tareas[task_id]['ultimo_envio_email'] = datetime.now().isoformat()
+                                    print(f"[INFO] Email de alerta enviado para tarea {task_id}")
+                    else:
+                        # Primera vez, enviar email
+                        email_destino = config_alerta.get('email_aviso')
+                        if email_destino:
+                            horas = int(tiempo_transcurrido.total_seconds() // 3600)
+                            minutos = int((tiempo_transcurrido.total_seconds() % 3600) // 60)
+                            tiempo_sin_act = f"{horas} horas y {minutos} minutos"
+
+                            if enviar_email_alerta(email_destino, task_name, task_url, tiempo_sin_act):
+                                alertas_tareas[task_id]['ultimo_envio_email'] = datetime.now().isoformat()
+                                print(f"[INFO] Email de alerta enviado para tarea {task_id}")
+
+            except Exception as e:
+                print(f"[ERROR] Error al verificar alerta para tarea {task_id}: {str(e)}")
+
+        return jsonify({
+            'success': True,
+            'message': 'Webhook procesado correctamente',
+            'task_id': task_id,
+            'estado': estado,
+            'timestamp': datetime.now().isoformat()
+        }), 200
+
+    except Exception as e:
+        print(f"[ERROR] Error al procesar webhook: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal Server Error', 'message': str(e)}), 500
+
+@app.route('/api/webhook/tasks/cache', methods=['GET'])
+def obtener_cache_tareas():
+    """
+    Endpoint para obtener el caché de tareas actualizadas vía webhook
+    Puede filtrar por task_id específico o devolver todo el caché
+    """
+    try:
+        task_id = request.args.get('task_id')
+
+        if task_id:
+            # Devolver una tarea específica
+            if task_id in tareas_cache:
+                return jsonify({
+                    'success': True,
+                    'task': tareas_cache[task_id]
+                }), 200
+            else:
+                return jsonify({
+                    'success': False,
+                    'message': f'Tarea {task_id} no encontrada en caché'
+                }), 404
+        else:
+            # Devolver todo el caché
+            return jsonify({
+                'success': True,
+                'tasks': list(tareas_cache.values()),
+                'count': len(tareas_cache),
+                'timestamp': datetime.now().isoformat()
+            }), 200
+
+    except Exception as e:
+        print(f"[ERROR] Error al obtener caché: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/webhook/tasks/cache', methods=['DELETE'])
+def limpiar_cache_tareas():
+    """
+    Endpoint para limpiar el caché de tareas (útil para testing y mantenimiento)
+    """
+    try:
+        global tareas_cache
+        tareas_cache = {}
+
+        print("[INFO] Caché de tareas limpiado")
+
+        return jsonify({
+            'success': True,
+            'message': 'Caché limpiado correctamente'
+        }), 200
+
+    except Exception as e:
+        print(f"[ERROR] Error al limpiar caché: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 def get_headers():
     if 'access_token' not in session:

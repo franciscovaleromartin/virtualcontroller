@@ -57,6 +57,7 @@ Edita el archivo `.env` con las siguientes variables:
 - `SMTP_PORT`: Puerto SMTP (por defecto: 587)
 - `SMTP_EMAIL`: Email desde el cual se enviarán las alertas
 - `SMTP_PASSWORD`: Contraseña del email (se recomienda usar App Password de Gmail)
+- `WEBHOOK_SECRET_TOKEN`: Token de seguridad para validar webhooks de make.com (opcional pero recomendado)
 
 ### Configuración de ClickUp OAuth
 
@@ -91,6 +92,75 @@ Para usar Gmail como servidor SMTP:
    - Ingresa el email donde recibirás las alertas
    - Configura el tiempo (horas y minutos) sin actualización para enviar alerta
 5. Haz clic en "Guardar"
+
+### Integración con Webhooks (Make.com)
+
+El sistema incluye un endpoint webhook que permite recibir actualizaciones en tiempo real desde ClickUp a través de make.com:
+
+#### Configuración del Webhook
+
+1. **Genera un token de seguridad**:
+   ```bash
+   # En Linux/Mac:
+   openssl rand -hex 32
+
+   # O usa cualquier generador de tokens aleatorios
+   ```
+
+2. **Configura el token** en tu archivo `.env`:
+   ```
+   WEBHOOK_SECRET_TOKEN=tu_token_secreto_aqui
+   ```
+
+3. **Configura Make.com**:
+   - Crea un nuevo escenario en make.com
+   - Conecta el trigger de ClickUp (cuando una tarea se actualiza)
+   - Agrega un módulo HTTP para hacer una petición POST a tu webhook
+   - URL del webhook: `https://tu-dominio.com/webhook/clickup?token=tu_token_secreto`
+   - O alternativamente, envía el token en el header `X-Webhook-Token`
+
+#### Formato del Payload
+
+El webhook espera recibir un JSON con el siguiente formato:
+
+```json
+{
+  "task_id": "abc123",
+  "task_name": "Nombre de la tarea",
+  "status": "in progress",
+  "date_updated": 1234567890000,
+  "url": "https://app.clickup.com/t/...",
+  "event_type": "taskUpdated",
+  "horas_trabajadas": 5,
+  "minutos_trabajados": 30
+}
+```
+
+**Campos requeridos:**
+- `task_id`: ID de la tarea en ClickUp
+- `task_name`: Nombre de la tarea
+- `status`: Estado actual de la tarea
+- `date_updated`: Timestamp de la última actualización (en milisegundos)
+- `url`: URL de la tarea en ClickUp
+
+**Campos opcionales:**
+- `event_type`: Tipo de evento (taskUpdated, taskCreated, etc.)
+- `horas_trabajadas`: Horas trabajadas en la tarea
+- `minutos_trabajados`: Minutos trabajados en la tarea
+
+#### Endpoints del Webhook
+
+- **POST /webhook/clickup**: Recibe actualizaciones de tareas desde make.com
+- **GET /api/webhook/tasks/cache**: Consulta el caché de tareas actualizadas vía webhook
+  - Parámetro opcional: `?task_id=abc123` para obtener una tarea específica
+- **DELETE /api/webhook/tasks/cache**: Limpia el caché de tareas (útil para testing)
+
+#### Ventajas del Webhook
+
+- ✅ Actualizaciones en tiempo real sin polling constante
+- ✅ Menor uso de la API de ClickUp
+- ✅ Alertas instantáneas cuando las tareas cambian
+- ✅ Caché local de tareas para consultas rápidas
 
 ### Cómo Funcionan las Alertas
 
