@@ -340,6 +340,9 @@
         <header>
             <h1>Virtual Controller SIDN</h1>
             <div class="subtitle">Sistema de monitoreo y alertas para ClickUp</div>
+            <button onclick="testWebSocket()" style="position: absolute; top: 20px; right: 20px; padding: 10px 20px; background: rgba(255,255,255,0.2); color: white; border: 2px solid white; border-radius: 8px; cursor: pointer; font-weight: bold;">
+                🔌 Test WebSocket
+            </button>
         </header>
 
         <div class="content">
@@ -500,6 +503,21 @@
             socket.on('space_deleted', (data) => {
                 console.log('[WebSocket] Espacio eliminado:', data);
                 handleSpaceDeleted(data);
+            });
+
+            // Evento de prueba para debugging
+            socket.on('test_event', (data) => {
+                console.log('[WebSocket] ✅ TEST EXITOSO - Evento recibido:', data);
+                alert('WebSocket funciona! Evento recibido: ' + data.message);
+            });
+
+            // Log de errores de conexión
+            socket.on('connect_error', (error) => {
+                console.error('[WebSocket] ❌ Error de conexión:', error);
+            });
+
+            socket.on('error', (error) => {
+                console.error('[WebSocket] ❌ Error:', error);
             });
         }
 
@@ -1190,6 +1208,32 @@
                     }
                 }
             }, 5000); // 5 segundos después de cargar las tareas
+        }
+
+        // Función de prueba para WebSocket
+        async function testWebSocket() {
+            console.log('[TEST] Enviando petición de prueba WebSocket...');
+            try {
+                const response = await fetch('/api/test-websocket', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const result = await response.json();
+                console.log('[TEST] Respuesta del servidor:', result);
+
+                if (result.success) {
+                    console.log('[TEST] El servidor emitió el evento. Esperando recepción en cliente...');
+                } else {
+                    console.error('[TEST] Error del servidor:', result.error);
+                    alert('Error al enviar test: ' + result.error);
+                }
+            } catch (error) {
+                console.error('[TEST] Error en la petición:', error);
+                alert('Error al enviar test: ' + error.message);
+            }
         }
     </script>
 </body>

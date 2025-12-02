@@ -1703,5 +1703,44 @@ def get_task_status_history_api(task_id):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/test-websocket', methods=['POST'])
+def test_websocket():
+    """
+    Endpoint de prueba para verificar que WebSocket funciona
+    """
+    try:
+        test_data = {
+            'message': 'Test desde servidor',
+            'timestamp': datetime.now().isoformat()
+        }
+
+        # Emitir evento de prueba
+        socketio.emit('test_event', test_data, namespace='/')
+
+        print(f"[TEST] Evento WebSocket de prueba emitido: {test_data}")
+
+        return jsonify({
+            'success': True,
+            'message': 'Evento de prueba emitido. Verifica la consola del navegador.',
+            'data': test_data
+        })
+    except Exception as e:
+        print(f"[ERROR] Error al emitir evento de prueba: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+# Eventos de SocketIO para debugging
+@socketio.on('connect', namespace='/')
+def handle_connect():
+    print(f"[SocketIO] Cliente conectado - SID: {request.sid}")
+
+
+@socketio.on('disconnect', namespace='/')
+def handle_disconnect():
+    print(f"[SocketIO] Cliente desconectado - SID: {request.sid}")
+
+
 if __name__ == '__main__':
     socketio.run(app, debug=True, host='0.0.0.0', port=5000)
