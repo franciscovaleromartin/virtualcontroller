@@ -1,3 +1,7 @@
+# IMPORTANTE: Monkey patching de gevent debe ser lo primero
+from gevent import monkey
+monkey.patch_all()
+
 from flask import Flask, render_template, jsonify, request, redirect, session, url_for
 import requests
 from datetime import datetime, timedelta
@@ -5,7 +9,6 @@ import json
 import os
 import re
 from dotenv import load_dotenv
-import threading
 import time
 import smtplib
 from email.mime.text import MIMEText
