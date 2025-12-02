@@ -19,8 +19,8 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# Inicializar SocketIO
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+# Inicializar SocketIO con threading para mejor compatibilidad
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 CLICKUP_CLIENT_ID = os.getenv('CLICKUP_CLIENT_ID')
 CLICKUP_CLIENT_SECRET = os.getenv('CLICKUP_CLIENT_SECRET')
