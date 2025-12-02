@@ -64,9 +64,9 @@ Edita el archivo `.env` con las siguientes variables:
 1. Ve a https://app.clickup.com/settings/apps
 2. Crea una nueva aplicación OAuth
 3. Configura la URL de redirección (Redirect URL):
-   - **Para producción**: `https://virtualcontroller.onrender.com/oauth/callback`
-   - **Para desarrollo local**: `http://localhost:5000/oauth/callback`
-   - **Importante**: La URL debe terminar exactamente con `/oauth/callback`
+   - **Para producción**: `https://virtualcontroller.onrender.com`
+   - **Para desarrollo local**: `http://localhost:5000`
+   - **Importante**: Sin `/` al final, sin `/callback` ni ningún subdirectorio
 4. Copia el Client ID y Client Secret al archivo .env
 
 ### Configuración de Email (Gmail)
