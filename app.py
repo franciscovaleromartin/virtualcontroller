@@ -585,7 +585,7 @@ def process_task_event(event_type, data):
         socketio.emit('task_deleted', {
             'task_id': task_id,
             'list_id': list_id_deleted
-        }, namespace='/', broadcast=True)
+        }, namespace='/')
 
         print(f"[INFO] Tarea {task_id} eliminada")
         print(f"[INFO] Evento WebSocket 'task_deleted' emitido (broadcast) para tarea {task_id}")
@@ -680,13 +680,13 @@ def process_task_event(event_type, data):
             'task_id': task_id,
             'task': tareas_cache[task_id],
             'list_id': list_id
-        }, namespace='/', broadcast=True)
+        }, namespace='/')
         print(f"[INFO] Evento WebSocket 'task_created' emitido (broadcast) para tarea {task_id}")
     elif event_type == 'taskDeleted':
         socketio.emit('task_deleted', {
             'task_id': task_id,
             'list_id': list_id
-        }, namespace='/', broadcast=True)
+        }, namespace='/')
         print(f"[INFO] Evento WebSocket 'task_deleted' emitido (broadcast) para tarea {task_id}")
     elif event_type in ['taskUpdated', 'taskStatusUpdated']:
         socketio.emit('task_updated', {
@@ -696,7 +696,7 @@ def process_task_event(event_type, data):
             'status_changed': old_status != estado,
             'old_status': old_status,
             'new_status': estado
-        }, namespace='/', broadcast=True)
+        }, namespace='/')
         print(f"[INFO] Evento WebSocket 'task_updated' emitido (broadcast) para tarea {task_id}")
 
     # Verificar alertas si está configurada
@@ -724,7 +724,7 @@ def process_list_event(event_type, data):
             'project_id': list_id,
             'project_type': 'list',
             'space_id': space_id
-        }, namespace='/', broadcast=True)
+        }, namespace='/')
 
         print(f"[INFO] Lista {list_id} eliminada")
         print(f"[INFO] Evento WebSocket 'project_deleted' emitido (broadcast) para lista {list_id}")
@@ -743,7 +743,7 @@ def process_list_event(event_type, data):
         'space_id': space_id,
         'folder_id': folder_id,
         'archived': archived
-    }, namespace='/', broadcast=True)
+    }, namespace='/')
     print(f"[INFO] Evento WebSocket '{event_name}' emitido (broadcast) para lista {list_id}")
 
     return {'status': 'saved', 'list_id': list_id, 'name': list_name}
@@ -765,7 +765,7 @@ def process_folder_event(event_type, data):
             'project_id': folder_id,
             'project_type': 'folder',
             'space_id': space_id
-        }, namespace='/', broadcast=True)
+        }, namespace='/')
 
         print(f"[INFO] Carpeta {folder_id} eliminada")
         print(f"[INFO] Evento WebSocket 'project_deleted' emitido (broadcast) para carpeta {folder_id}")
@@ -782,7 +782,7 @@ def process_folder_event(event_type, data):
         'project_name': folder_name,
         'space_id': space_id,
         'hidden': hidden
-    }, namespace='/', broadcast=True)
+    }, namespace='/')
     print(f"[INFO] Evento WebSocket '{event_name}' emitido (broadcast) para carpeta {folder_id}")
 
     return {'status': 'saved', 'folder_id': folder_id, 'name': folder_name}
@@ -801,7 +801,7 @@ def process_space_event(event_type, data):
         # Emitir evento WebSocket
         socketio.emit('space_deleted', {
             'space_id': space_id
-        }, namespace='/', broadcast=True)
+        }, namespace='/')
 
         print(f"[INFO] Espacio {space_id} eliminado")
         print(f"[INFO] Evento WebSocket 'space_deleted' emitido (broadcast) para espacio {space_id}")
@@ -816,7 +816,7 @@ def process_space_event(event_type, data):
         'space_id': space_id,
         'space_name': space_name,
         'team_id': team_id
-    }, namespace='/', broadcast=True)
+    }, namespace='/')
     print(f"[INFO] Evento WebSocket '{event_name}' emitido (broadcast) para espacio {space_id}")
 
     return {'status': 'saved', 'space_id': space_id, 'name': space_name}
