@@ -60,24 +60,34 @@ def handle_oauth_callback(code):
     print(f"[DEBUG] OAuth callback recibido con código: {code[:10]}...")
     token_url = "https://api.clickup.com/api/v2/oauth/token"
 
-    payload = {
+    # ClickUp requiere estos parámetros como query params
+    params = {
         'client_id': CLICKUP_CLIENT_ID,
         'client_secret': CLICKUP_CLIENT_SECRET,
         'code': code
     }
 
     print(f"[DEBUG] Enviando request a ClickUp para obtener token...")
+    print(f"[DEBUG] Client ID: {CLICKUP_CLIENT_ID[:10]}...")
 
     try:
-        response = requests.post(token_url, data=payload)
+        # ClickUp OAuth requiere parámetros como query params, no como body
+        response = requests.post(token_url, params=params)
 
         print(f"[DEBUG] Respuesta de ClickUp: Status {response.status_code}")
+        print(f"[DEBUG] Response body: {response.text}")
 
         if response.status_code != 200:
             print(f"[ERROR] Error al obtener token: {response.text}")
             return f"Error al obtener token (Status {response.status_code}): {response.text}", 400
 
         token_data = response.json()
+
+        # Verificar que el access_token esté presente
+        if 'access_token' not in token_data:
+            print(f"[ERROR] No se recibió access_token en la respuesta: {token_data}")
+            return "Error: No se recibió access_token de ClickUp", 400
+
         session['access_token'] = token_data['access_token']
 
         print(f"[DEBUG] Token obtenido y guardado en sesión correctamente")
@@ -86,6 +96,8 @@ def handle_oauth_callback(code):
 
     except Exception as e:
         print(f"[ERROR] Excepción en OAuth callback: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return f"Error: {str(e)}", 500
 
 @app.route('/login')
