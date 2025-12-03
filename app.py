@@ -2,6 +2,10 @@
 from gevent import monkey
 monkey.patch_all()
 
+import sys
+print(f"[STARTUP] Python version: {sys.version}", flush=True)
+print(f"[STARTUP] Iniciando aplicación...", flush=True)
+
 from flask import Flask, render_template, jsonify, request, redirect, session, url_for
 import requests
 from datetime import datetime, timedelta
@@ -17,13 +21,21 @@ from urllib.parse import quote
 import db  # Importar módulo de base de datos
 from flask_socketio import SocketIO, emit
 
+print(f"[STARTUP] Imports completados exitosamente", flush=True)
+
 load_dotenv()
+
+print(f"[STARTUP] Variables de entorno cargadas", flush=True)
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
+print(f"[STARTUP] Flask app creada", flush=True)
+
 # Inicializar SocketIO con gevent para mejor compatibilidad en producción
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
+
+print(f"[STARTUP] SocketIO inicializado", flush=True)
 
 CLICKUP_CLIENT_ID = os.getenv('CLICKUP_CLIENT_ID')
 CLICKUP_CLIENT_SECRET = os.getenv('CLICKUP_CLIENT_SECRET')
@@ -52,7 +64,20 @@ tareas_cache = {}
 @app.route('/health')
 def health():
     """Health check endpoint for Render"""
-    return jsonify({'status': 'ok', 'timestamp': datetime.now().isoformat()}), 200
+    return jsonify({
+        'status': 'ok',
+        'timestamp': datetime.now().isoformat(),
+        'service': 'virtualcontroller'
+    }), 200
+
+@app.route('/api/health')
+def api_health():
+    """Alternative health check endpoint"""
+    return jsonify({
+        'status': 'healthy',
+        'service': 'virtualcontroller',
+        'timestamp': datetime.now().isoformat()
+    }), 200
 
 @app.route('/')
 def inicio():
