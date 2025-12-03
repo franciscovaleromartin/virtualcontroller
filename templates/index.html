@@ -366,8 +366,7 @@
                         <tr>
                             <th>Tarea</th>
                             <th>Estado</th>
-                            <th>Tiempo Trabajado</th>
-                            <th>Tiempo en Progreso (En Vivo)</th>
+                            <th>Tiempo en Progreso</th>
                             <th>Última Actualización</th>
                             <th>Configuración de Alerta</th>
                         </tr>
@@ -518,7 +517,7 @@
             // Recorrer todas las tareas del proyecto actual
             tareasActuales.forEach(tarea => {
                 const row = document.querySelector(`tr[data-task-id="${tarea.id}"]`);
-                const timeCell = row ? row.cells[3] : null;
+                const timeCell = row ? row.cells[2] : null;  // Celda de tiempo (índice 2: Nombre, Estado, Tiempo)
 
                 if (!row || !timeCell) {
                     console.warn(`[Time Tracking] No se encontró la fila para tarea ${tarea.id}`);
@@ -735,15 +734,11 @@
                         `Activa (${tarea.alerta.aviso_horas}h ${tarea.alerta.aviso_minutos}m)` :
                         'Sin configurar';
 
-                    // Formatear el tiempo trabajado
-                    const tiempoTrabajado = `${tarea.horas_trabajadas}h ${tarea.minutos_trabajados}m`;
-
                     tr.innerHTML = `
                         <td>
                             <a href="${tarea.url}" target="_blank" class="tarea-link">${tarea.nombre}</a>
                         </td>
                         <td><strong>${tarea.estado_texto}</strong></td>
-                        <td>${tiempoTrabajado}</td>
                         <td style="color: #999;">--</td>
                         <td>${tarea.fecha_actualizacion}</td>
                         <td>
