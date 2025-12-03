@@ -49,6 +49,11 @@ alertas_config = {}
 # Estructura: {tarea_id: {datos_tarea, timestamp_actualizacion}}
 tareas_cache = {}
 
+@app.route('/health')
+def health():
+    """Health check endpoint for Render"""
+    return jsonify({'status': 'ok', 'timestamp': datetime.now().isoformat()}), 200
+
 @app.route('/')
 def inicio():
     code = request.args.get('code')
