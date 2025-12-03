@@ -428,6 +428,7 @@
         // Variables globales para manejo de tiempo real
         let timeTrackingData = {}; // {task_id: {total_seconds, current_session_start, is_currently_in_progress}}
         let timeUpdateInterval = null;
+        let timeDataFetchInterval = null;
         let currentProjectId = null;
         let currentProjectType = null;
 
@@ -456,20 +457,33 @@
             // Obtener datos iniciales
             fetchAndUpdateTimeTracking();
 
-            // Actualizar cada segundo
+            // Limpiar intervalos anteriores si existen
             if (timeUpdateInterval) {
                 clearInterval(timeUpdateInterval);
             }
+            if (timeDataFetchInterval) {
+                clearInterval(timeDataFetchInterval);
+            }
 
+            // Actualizar displays cada segundo
             timeUpdateInterval = setInterval(() => {
                 updateAllTimeDisplays();
             }, 1000);
+
+            // Actualizar datos de estado cada 5 segundos para detectar cambios de estado
+            timeDataFetchInterval = setInterval(() => {
+                fetchAndUpdateTimeTracking();
+            }, 5000);
         }
 
         function stopTimeTracking() {
             if (timeUpdateInterval) {
                 clearInterval(timeUpdateInterval);
                 timeUpdateInterval = null;
+            }
+            if (timeDataFetchInterval) {
+                clearInterval(timeDataFetchInterval);
+                timeDataFetchInterval = null;
             }
         }
 
@@ -481,11 +495,13 @@
                 // Sumar el tiempo histórico de cada tarea (convertir horas y minutos a segundos)
                 const historicalSeconds = (tarea.horas_trabajadas * 3600) + (tarea.minutos_trabajados * 60);
 
+                const row = document.querySelector(`tr[data-task-id="${tarea.id}"]`);
+                const timeCell = row ? row.cells[3] : null;
+
                 // Si la tarea está en progreso, actualizar su celda y agregar tiempo adicional
                 const taskData = timeTrackingData[tarea.id];
                 if (taskData && taskData.is_currently_in_progress) {
-                    const row = document.querySelector(`tr[data-task-id="${tarea.id}"]`);
-                    if (row) {
+                    if (row && timeCell) {
                         // Calcular tiempo adicional desde que empezó la sesión actual
                         let additionalSeconds = 0;
                         if (taskData.current_session_start) {
@@ -496,19 +512,36 @@
 
                         const totalTaskSeconds = taskData.total_seconds + additionalSeconds;
 
-                        // Actualizar celda de tiempo en vivo (columna 3)
-                        const timeCell = row.cells[3];
-                        if (timeCell) {
-                            timeCell.textContent = formatSeconds(totalTaskSeconds);
-                            timeCell.style.color = '#667eea';
-                            timeCell.style.fontWeight = 'bold';
-                        }
+                        // Actualizar celda de tiempo en vivo con estilo "activo"
+                        timeCell.textContent = '▶ ' + formatSeconds(totalTaskSeconds);
+                        timeCell.style.color = '#667eea';
+                        timeCell.style.fontWeight = 'bold';
 
                         // Sumar al total del proyecto
                         totalSecondsProject += totalTaskSeconds;
                     }
                 } else {
-                    // Para tareas que no están en progreso, solo sumar el tiempo histórico
+                    // Para tareas que NO están en progreso, mostrar tiempo pausado
+                    if (row && timeCell) {
+                        // Mostrar el tiempo acumulado total (histórico + lo que haya en taskData si existe)
+                        let totalTaskSeconds = historicalSeconds;
+                        if (taskData) {
+                            totalTaskSeconds = taskData.total_seconds;
+                        }
+
+                        // Mostrar con estilo "pausado"
+                        if (totalTaskSeconds > 0) {
+                            timeCell.textContent = '⏸ ' + formatSeconds(totalTaskSeconds);
+                            timeCell.style.color = '#999';
+                            timeCell.style.fontWeight = 'normal';
+                        } else {
+                            timeCell.textContent = '--';
+                            timeCell.style.color = '#999';
+                            timeCell.style.fontWeight = 'normal';
+                        }
+                    }
+
+                    // Sumar solo el tiempo histórico al total del proyecto
                     totalSecondsProject += historicalSeconds;
                 }
             });
