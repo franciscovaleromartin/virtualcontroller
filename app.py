@@ -1,7 +1,3 @@
-# IMPORTANTE: Monkey patching de gevent debe ser lo primero
-from gevent import monkey
-monkey.patch_all()
-
 import sys
 print(f"[STARTUP] Python version: {sys.version}", flush=True)
 print(f"[STARTUP] Iniciando aplicación...", flush=True)
@@ -19,7 +15,6 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from urllib.parse import quote
 import db  # Importar módulo de base de datos
-from flask_socketio import SocketIO, emit
 
 print(f"[STARTUP] Imports completados exitosamente", flush=True)
 
@@ -31,11 +26,6 @@ app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
 print(f"[STARTUP] Flask app creada", flush=True)
-
-# Inicializar SocketIO con gevent para mejor compatibilidad en producción
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
-
-print(f"[STARTUP] SocketIO inicializado", flush=True)
 
 CLICKUP_CLIENT_ID = os.getenv('CLICKUP_CLIENT_ID')
 CLICKUP_CLIENT_SECRET = os.getenv('CLICKUP_CLIENT_SECRET')
@@ -614,14 +604,7 @@ def process_task_event(event_type, data):
         if task_id in tareas_cache:
             del tareas_cache[task_id]
 
-        # Emitir evento WebSocket
-        socketio.emit('task_deleted', {
-            'task_id': task_id,
-            'list_id': list_id_deleted
-        }, namespace='/')
-
         print(f"[INFO] Tarea {task_id} eliminada")
-        print(f"[INFO] Evento WebSocket 'task_deleted' emitido (broadcast) para tarea {task_id}")
         return {'status': 'deleted', 'task_id': task_id}
 
     # Para taskCreated, taskUpdated, taskStatusUpdated
@@ -707,31 +690,6 @@ def process_task_event(event_type, data):
 
     print(f"[INFO] Tarea {task_id} guardada en BD y caché: {task_name}")
 
-    # Emitir evento WebSocket según el tipo de evento (broadcast a todos los clientes)
-    if event_type == 'taskCreated':
-        socketio.emit('task_created', {
-            'task_id': task_id,
-            'task': tareas_cache[task_id],
-            'list_id': list_id
-        }, namespace='/')
-        print(f"[INFO] Evento WebSocket 'task_created' emitido (broadcast) para tarea {task_id}")
-    elif event_type == 'taskDeleted':
-        socketio.emit('task_deleted', {
-            'task_id': task_id,
-            'list_id': list_id
-        }, namespace='/')
-        print(f"[INFO] Evento WebSocket 'task_deleted' emitido (broadcast) para tarea {task_id}")
-    elif event_type in ['taskUpdated', 'taskStatusUpdated']:
-        socketio.emit('task_updated', {
-            'task_id': task_id,
-            'task': tareas_cache[task_id],
-            'list_id': list_id,
-            'status_changed': old_status != estado,
-            'old_status': old_status,
-            'new_status': estado
-        }, namespace='/')
-        print(f"[INFO] Evento WebSocket 'task_updated' emitido (broadcast) para tarea {task_id}")
-
     # Verificar alertas si está configurada
     alert = db.get_task_alert(task_id)
     if alert and alert.get('aviso_activado'):
@@ -752,32 +710,12 @@ def process_list_event(event_type, data):
     archived = data.get('archived', False)
 
     if event_type == 'listDeleted':
-        # Emitir evento WebSocket
-        socketio.emit('project_deleted', {
-            'project_id': list_id,
-            'project_type': 'list',
-            'space_id': space_id
-        }, namespace='/')
-
         print(f"[INFO] Lista {list_id} eliminada")
-        print(f"[INFO] Evento WebSocket 'project_deleted' emitido (broadcast) para lista {list_id}")
         return {'status': 'deleted', 'list_id': list_id}
 
     # Guardar lista en BD
     db.save_list(list_id, list_name, space_id, folder_id, archived, metadata=data)
     print(f"[INFO] Lista {list_id} guardada: {list_name}")
-
-    # Emitir evento WebSocket
-    event_name = 'project_created' if event_type == 'listCreated' else 'project_updated'
-    socketio.emit(event_name, {
-        'project_id': list_id,
-        'project_type': 'list',
-        'project_name': list_name,
-        'space_id': space_id,
-        'folder_id': folder_id,
-        'archived': archived
-    }, namespace='/')
-    print(f"[INFO] Evento WebSocket '{event_name}' emitido (broadcast) para lista {list_id}")
 
     return {'status': 'saved', 'list_id': list_id, 'name': list_name}
 
@@ -793,30 +731,11 @@ def process_folder_event(event_type, data):
     hidden = data.get('hidden', False)
 
     if event_type == 'folderDeleted':
-        # Emitir evento WebSocket
-        socketio.emit('project_deleted', {
-            'project_id': folder_id,
-            'project_type': 'folder',
-            'space_id': space_id
-        }, namespace='/')
-
         print(f"[INFO] Carpeta {folder_id} eliminada")
-        print(f"[INFO] Evento WebSocket 'project_deleted' emitido (broadcast) para carpeta {folder_id}")
         return {'status': 'deleted', 'folder_id': folder_id}
 
     db.save_folder(folder_id, folder_name, space_id, hidden, metadata=data)
     print(f"[INFO] Carpeta {folder_id} guardada: {folder_name}")
-
-    # Emitir evento WebSocket
-    event_name = 'project_created' if event_type == 'folderCreated' else 'project_updated'
-    socketio.emit(event_name, {
-        'project_id': folder_id,
-        'project_type': 'folder',
-        'project_name': folder_name,
-        'space_id': space_id,
-        'hidden': hidden
-    }, namespace='/')
-    print(f"[INFO] Evento WebSocket '{event_name}' emitido (broadcast) para carpeta {folder_id}")
 
     return {'status': 'saved', 'folder_id': folder_id, 'name': folder_name}
 
@@ -831,26 +750,11 @@ def process_space_event(event_type, data):
     team_id = data.get('team_id')
 
     if event_type == 'spaceDeleted':
-        # Emitir evento WebSocket
-        socketio.emit('space_deleted', {
-            'space_id': space_id
-        }, namespace='/')
-
         print(f"[INFO] Espacio {space_id} eliminado")
-        print(f"[INFO] Evento WebSocket 'space_deleted' emitido (broadcast) para espacio {space_id}")
         return {'status': 'deleted', 'space_id': space_id}
 
     db.save_space(space_id, space_name, team_id, metadata=data)
     print(f"[INFO] Espacio {space_id} guardado: {space_name}")
-
-    # Emitir evento WebSocket
-    event_name = 'space_created' if event_type == 'spaceCreated' else 'space_updated'
-    socketio.emit(event_name, {
-        'space_id': space_id,
-        'space_name': space_name,
-        'team_id': team_id
-    }, namespace='/')
-    print(f"[INFO] Evento WebSocket '{event_name}' emitido (broadcast) para espacio {space_id}")
 
     return {'status': 'saved', 'space_id': space_id, 'name': space_name}
 
@@ -1224,109 +1128,18 @@ def get_lists(space_id):
         return jsonify({'error': str(e)}), 500
 
 def calcular_tiempo_en_progreso(tarea_id, estado_actual, headers):
-    """Calcula el tiempo total que una tarea ha estado en estado 'in progress' usando time_in_status de ClickUp"""
+    """Calcula el tiempo total que una tarea ha estado en estado 'in progress' usando datos locales de la BD"""
     try:
-        # Obtener información completa de la tarea
-        tarea_response = requests.get(
-            f'https://api.clickup.com/api/v2/task/{tarea_id}',
-            headers=headers,
-            timeout=10
-        )
+        # Usar la función de base de datos que calcula tiempo desde el historial local
+        time_data = db.calculate_task_time_in_progress(tarea_id)
 
-        if tarea_response.status_code != 200:
-            print(f"[WARNING] No se pudo obtener información de tarea {tarea_id}")
-            return 0, 0
-
-        tarea_info = tarea_response.json()
-
-        # Obtener estado actual de la tarea
-        estado_actual_lower = tarea_info.get('status', {}).get('status', '').lower()
-        estado_actual_nombre = tarea_info.get('status', {}).get('status', 'Sin estado')
-        print(f"[INFO] Estado actual de tarea {tarea_id}: {estado_actual_nombre}")
-
-        # Usar el endpoint de time_in_status para obtener el tiempo en cada estado
-        time_in_status_response = requests.get(
-            f'https://api.clickup.com/api/v2/task/{tarea_id}/time_in_status',
-            headers=headers,
-            timeout=10
-        )
-
-        tiempo_total_segundos = 0
-
-        if time_in_status_response.status_code == 200:
-            time_in_status_data = time_in_status_response.json()
-
-            print(f"[INFO] Obteniendo tiempo por estado desde ClickUp time_in_status")
-
-            # El formato esperado de respuesta:
-            # {
-            #   "current_status": {...},
-            #   "status_history": [...]
-            # }
-
-            status_history = time_in_status_data.get('status_history', [])
-            current_status = time_in_status_data.get('current_status', {})
-
-            print(f"[DEBUG] Estados en historial: {len(status_history)}")
-
-            # Sumar tiempo de todos los estados que contengan "progress" o "doing"
-            for status_entry in status_history:
-                status_name = status_entry.get('status', '').lower()
-                total_time = status_entry.get('total_time', {})
-
-                # Verificar si es un estado "in progress"
-                if 'progress' in status_name or 'doing' in status_name:
-                    # El tiempo puede venir en diferentes formatos
-                    # Intentar obtener milisegundos primero
-                    if 'by_minute' in total_time:
-                        minutos = total_time['by_minute']
-                        segundos = minutos * 60
-                    elif 'milliseconds' in total_time:
-                        segundos = total_time['milliseconds'] / 1000
-                    else:
-                        segundos = 0
-
-                    tiempo_total_segundos += segundos
-                    print(f"[INFO] ✓ Estado '{status_entry.get('status')}': {segundos/3600:.2f}h ({segundos/60:.1f}min)")
-
-            # Si el estado actual es "in progress", también incluir su tiempo
-            if current_status:
-                current_status_name = current_status.get('status', '').lower()
-                if 'progress' in current_status_name or 'doing' in current_status_name:
-                    total_time = current_status.get('total_time', {})
-                    if 'by_minute' in total_time:
-                        minutos = total_time['by_minute']
-                        segundos = minutos * 60
-                        tiempo_total_segundos += segundos
-                        print(f"[INFO] ✓ Estado actual '{current_status.get('status')}': {segundos/3600:.2f}h ({segundos/60:.1f}min)")
-
-            print(f"[INFO] Tiempo total en estados 'In Progress': {tiempo_total_segundos/3600:.2f}h")
-
-        else:
-            print(f"[WARNING] No se pudo obtener time_in_status para tarea {tarea_id}, status code: {time_in_status_response.status_code}")
-            if time_in_status_response.status_code == 403:
-                print(f"[WARNING] La ClickApp 'Time in Status' requiere plan Business o superior")
-                print(f"[INFO] Usando tiempo rastreado manualmente (time_spent) como alternativa")
-            elif time_in_status_response.status_code == 404:
-                print(f"[WARNING] La ClickApp 'Total time in Status' NO está habilitada")
-                print(f"[INFO] Usando tiempo rastreado manualmente (time_spent) como alternativa")
-
-            # Fallback: usar time_spent (tiempo rastreado manualmente por usuarios)
-            time_spent = tarea_info.get('time_spent', 0)
-            if time_spent > 0:
-                # time_spent está en milisegundos
-                tiempo_total_segundos = time_spent / 1000
-                print(f"[INFO] Usando time_spent (tiempo manual): {tiempo_total_segundos/3600:.2f}h")
-            else:
-                print(f"[WARNING] No hay tiempo rastreado manualmente para esta tarea")
-                print(f"[INFO] Los usuarios deben usar el Time Tracker de ClickUp para registrar tiempo")
-                return 0, 0
+        tiempo_total_segundos = time_data['total_seconds']
 
         # Convertir a horas y minutos
         horas = int(tiempo_total_segundos // 3600)
         minutos = int((tiempo_total_segundos % 3600) // 60)
 
-        print(f"[INFO] Tiempo total 'In Progress' calculado desde activity: {horas}h {minutos}m (Estado actual: {estado_actual_nombre})")
+        print(f"[INFO] Tiempo total 'In Progress' calculado desde BD local: {horas}h {minutos}m")
 
         return horas, minutos
 
@@ -1402,48 +1215,6 @@ def obtener_tareas_de_lista(lista_id, headers):
     except Exception as e:
         print(f"[ERROR] Error inesperado en obtener_tareas_de_lista: {str(e)}")
         return []
-
-def procesar_lista(lista, headers):
-    lista_id = lista['id']
-    lista_nombre = lista['name']
-
-    tasks_response = requests.get(
-        f'https://api.clickup.com/api/v2/list/{lista_id}/task',
-        headers=headers,
-        params={'order_by': 'updated', 'reverse': 'true', 'page': 0},
-        timeout=10
-    )
-
-    ultima_actualizacion = None
-    titulo_ultima_tarea = "Sin tareas"
-    enlace_tarea = ""
-    tarea_id = ""
-
-    if tasks_response.status_code == 200:
-        tasks = tasks_response.json()['tasks']
-        if tasks:
-            tarea = tasks[0]
-            ultima_actualizacion = datetime.fromtimestamp(int(tarea['date_updated']) / 1000)
-            titulo_ultima_tarea = tarea['name']
-            tarea_id = tarea['id']
-            enlace_tarea = tarea['url']
-
-    alerta_config = alertas_config.get(lista_id, {
-        'activa': False,
-        'email': '',
-        'horas': 0,
-        'minutos': 0
-    })
-
-    return {
-        'id': lista_id,
-        'nombre': lista_nombre,
-        'ultima_actualizacion': ultima_actualizacion.strftime('%Y-%m-%d %H:%M:%S') if ultima_actualizacion else 'N/A',
-        'titulo_ultima': titulo_ultima_tarea,
-        'enlace_tarea': enlace_tarea,
-        'tarea_id': tarea_id,
-        'alerta': alerta_config
-    }
 
 @app.route('/api/alerta/tarea/guardar', methods=['POST'])
 def guardar_alerta_tarea():
@@ -1736,44 +1507,5 @@ def get_task_status_history_api(task_id):
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/test-websocket', methods=['POST'])
-def test_websocket():
-    """
-    Endpoint de prueba para verificar que WebSocket funciona
-    """
-    try:
-        test_data = {
-            'message': 'Test desde servidor',
-            'timestamp': datetime.now().isoformat()
-        }
-
-        # Emitir evento de prueba
-        socketio.emit('test_event', test_data, namespace='/')
-
-        print(f"[TEST] Evento WebSocket de prueba emitido: {test_data}")
-
-        return jsonify({
-            'success': True,
-            'message': 'Evento de prueba emitido. Verifica la consola del navegador.',
-            'data': test_data
-        })
-    except Exception as e:
-        print(f"[ERROR] Error al emitir evento de prueba: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
-
-
-# Eventos de SocketIO para debugging
-@socketio.on('connect', namespace='/')
-def handle_connect():
-    print(f"[SocketIO] Cliente conectado - SID: {request.sid}")
-
-
-@socketio.on('disconnect', namespace='/')
-def handle_disconnect():
-    print(f"[SocketIO] Cliente desconectado - SID: {request.sid}")
-
-
 if __name__ == '__main__':
-    socketio.run(app, debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5000)
