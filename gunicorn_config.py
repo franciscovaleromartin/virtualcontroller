@@ -6,10 +6,10 @@ import multiprocessing
 import os
 import sys
 
-# Obtener puerto de la variable de entorno
-port = os.getenv('PORT', '5000')
+# Obtener puerto de la variable de entorno (Render usa PORT)
+port = os.getenv('PORT', '10000')
 
-print(f"[Gunicorn Config] Puerto: {port}", flush=True)
+print(f"[Gunicorn Config] Puerto detectado: {port}", flush=True)
 print(f"[Gunicorn Config] Python: {sys.version}", flush=True)
 
 # Número de workers
@@ -20,13 +20,13 @@ workers = 1
 worker_class = 'gevent'
 
 # Timeout para mantener conexiones WebSocket vivas
-timeout = 120
+timeout = 300
 graceful_timeout = 120
 
 # Keep alive timeout
 keepalive = 5
 
-# Bind to all interfaces
+# Bind to all interfaces with the PORT from environment
 bind = f"0.0.0.0:{port}"
 
 # Logging
