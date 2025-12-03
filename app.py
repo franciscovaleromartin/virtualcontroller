@@ -1203,6 +1203,48 @@ def obtener_tareas_de_lista(lista_id, headers):
                 # Fecha de última actualización
                 fecha_actualizacion = datetime.fromtimestamp(int(tarea['date_updated']) / 1000).strftime('%Y-%m-%d %H:%M:%S')
 
+                # Guardar tarea en la base de datos PRIMERO (necesario para calcular tiempo)
+                task_data = {
+                    'id': tarea['id'],
+                    'name': tarea['name'],
+                    'list_id': lista_id,
+                    'status': estado,
+                    'status_text': tarea.get('status', {}).get('status', 'Sin estado'),
+                    'url': tarea['url'],
+                    'description': tarea.get('description', ''),
+                    'priority': tarea.get('priority', {}).get('priority') if isinstance(tarea.get('priority'), dict) else tarea.get('priority'),
+                    'assignees': tarea.get('assignees', []),
+                    'date_created': parse_date_flexible(tarea.get('date_created')),
+                    'date_updated': parse_date_flexible(tarea.get('date_updated')),
+                    'due_date': parse_date_flexible(tarea.get('due_date')),
+                    'start_date': parse_date_flexible(tarea.get('start_date')),
+                    'time_estimate': tarea.get('time_estimate'),
+                    'time_spent': tarea.get('time_spent'),
+                    'tags': tarea.get('tags', []),
+                    'custom_fields': tarea.get('custom_fields', []),
+                    'metadata': tarea
+                }
+
+                # Verificar si la tarea existe para detectar cambio de estado
+                old_task = db.get_task(tarea['id'])
+                old_status = old_task.get('status') if old_task else None
+
+                # Guardar la tarea
+                db.save_task(task_data)
+                print(f"[INFO] Tarea {tarea['id']} guardada en BD: {tarea['name']}")
+
+                # Si cambió de estado, registrar el cambio en el historial
+                if old_status != estado:
+                    db.save_status_change(
+                        task_id=tarea['id'],
+                        old_status=old_status,
+                        new_status=estado,
+                        old_status_text=old_task.get('status_text') if old_task else None,
+                        new_status_text=task_data['status_text'],
+                        changed_at=parse_date_flexible(tarea.get('date_updated'))
+                    )
+                    print(f"[INFO] Cambio de estado registrado: {tarea['id']} de '{old_status}' a '{estado}'")
+
                 # Calcular tiempo en estado "in progress" usando el historial
                 print(f"[INFO] Calculando tiempo para tarea: {tarea['name']} (ID: {tarea['id']})")
 
