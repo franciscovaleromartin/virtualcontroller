@@ -438,22 +438,39 @@
 
         async function fetchAndUpdateTimeTracking() {
             try {
-                const response = await fetch('/api/tasks/time-tracking');
+                // Obtener los IDs de todas las tareas actuales del proyecto
+                const taskIds = tareasActuales.map(tarea => tarea.id);
+
+                if (taskIds.length === 0) {
+                    console.log('[Time Tracking] No hay tareas para actualizar');
+                    return;
+                }
+
+                // Usar el endpoint batch para obtener datos de todas las tareas
+                const response = await fetch('/api/tasks/time-tracking/batch', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        task_ids: taskIds
+                    })
+                });
+
                 const data = await response.json();
 
                 if (data.success) {
                     timeTrackingData = data.tasks;
                     console.log('[Time Tracking] Datos actualizados:', timeTrackingData);
+                } else {
+                    console.error('[Time Tracking] Error en respuesta:', data.error);
                 }
             } catch (error) {
                 console.error('[Time Tracking] Error al obtener datos:', error);
             }
         }
 
-        function startTimeTracking() {
-            // Obtener datos iniciales
-            fetchAndUpdateTimeTracking();
-
+        async function startTimeTracking() {
             // Limpiar intervalos anteriores si existen
             if (timeUpdateInterval) {
                 clearInterval(timeUpdateInterval);
@@ -462,14 +479,20 @@
                 clearInterval(timeDataFetchInterval);
             }
 
+            // Obtener datos iniciales y esperar a que terminen
+            await fetchAndUpdateTimeTracking();
+
+            // Actualizar displays inmediatamente con los datos obtenidos
+            updateAllTimeDisplays();
+
             // Actualizar displays cada segundo
             timeUpdateInterval = setInterval(() => {
                 updateAllTimeDisplays();
             }, 1000);
 
             // Actualizar datos de estado cada 5 segundos para detectar cambios de estado
-            timeDataFetchInterval = setInterval(() => {
-                fetchAndUpdateTimeTracking();
+            timeDataFetchInterval = setInterval(async () => {
+                await fetchAndUpdateTimeTracking();
             }, 5000);
         }
 
@@ -487,59 +510,68 @@
         function updateAllTimeDisplays() {
             let totalSecondsProject = 0;
 
+            if (!tareasActuales || tareasActuales.length === 0) {
+                console.log('[Time Tracking] No hay tareas para mostrar');
+                return;
+            }
+
             // Recorrer todas las tareas del proyecto actual
             tareasActuales.forEach(tarea => {
-                // Sumar el tiempo histórico de cada tarea (convertir horas y minutos a segundos)
-                const historicalSeconds = (tarea.horas_trabajadas * 3600) + (tarea.minutos_trabajados * 60);
-
                 const row = document.querySelector(`tr[data-task-id="${tarea.id}"]`);
                 const timeCell = row ? row.cells[3] : null;
 
-                // Si la tarea está en progreso, actualizar su celda y agregar tiempo adicional
+                if (!row || !timeCell) {
+                    console.warn(`[Time Tracking] No se encontró la fila para tarea ${tarea.id}`);
+                    return;
+                }
+
+                // Obtener datos de tiempo de esta tarea
                 const taskData = timeTrackingData[tarea.id];
+
+                // Si la tarea está en progreso AHORA
                 if (taskData && taskData.is_currently_in_progress) {
-                    if (row && timeCell) {
-                        // Calcular tiempo adicional desde que empezó la sesión actual
-                        let additionalSeconds = 0;
-                        if (taskData.current_session_start) {
-                            const sessionStart = new Date(taskData.current_session_start);
-                            const now = new Date();
-                            additionalSeconds = Math.floor((now - sessionStart) / 1000);
-                        }
-
-                        const totalTaskSeconds = taskData.total_seconds + additionalSeconds;
-
-                        // Actualizar celda de tiempo en vivo con estilo "activo"
-                        timeCell.textContent = '▶ ' + formatSeconds(totalTaskSeconds);
-                        timeCell.style.color = '#ff6b35';
-                        timeCell.style.fontWeight = 'bold';
-
-                        // Sumar al total del proyecto
-                        totalSecondsProject += totalTaskSeconds;
+                    // Calcular tiempo adicional desde que empezó la sesión actual
+                    let additionalSeconds = 0;
+                    if (taskData.current_session_start) {
+                        const sessionStart = new Date(taskData.current_session_start);
+                        const now = new Date();
+                        additionalSeconds = Math.floor((now - sessionStart) / 1000);
                     }
+
+                    const totalTaskSeconds = taskData.total_seconds + additionalSeconds;
+
+                    // Actualizar celda de tiempo en vivo con estilo "activo"
+                    timeCell.textContent = '▶ ' + formatSeconds(totalTaskSeconds);
+                    timeCell.style.color = '#ff6b35';
+                    timeCell.style.fontWeight = 'bold';
+
+                    // Sumar al total del proyecto
+                    totalSecondsProject += totalTaskSeconds;
                 } else {
                     // Para tareas que NO están en progreso, mostrar tiempo pausado
-                    if (row && timeCell) {
-                        // Mostrar el tiempo acumulado total (histórico + lo que haya en taskData si existe)
-                        let totalTaskSeconds = historicalSeconds;
-                        if (taskData) {
-                            totalTaskSeconds = taskData.total_seconds;
-                        }
-
-                        // Mostrar con estilo "pausado"
-                        if (totalTaskSeconds > 0) {
-                            timeCell.textContent = '⏸ ' + formatSeconds(totalTaskSeconds);
-                            timeCell.style.color = '#999';
-                            timeCell.style.fontWeight = 'normal';
-                        } else {
-                            timeCell.textContent = '--';
-                            timeCell.style.color = '#999';
-                            timeCell.style.fontWeight = 'normal';
-                        }
+                    // Usar taskData.total_seconds si existe, sino mostrar tiempo histórico de BD
+                    let totalTaskSeconds = 0;
+                    if (taskData) {
+                        totalTaskSeconds = taskData.total_seconds;
+                    } else {
+                        // Fallback: usar tiempo histórico de los datos de la tarea
+                        const historicalSeconds = (tarea.horas_trabajadas || 0) * 3600 + (tarea.minutos_trabajados || 0) * 60;
+                        totalTaskSeconds = historicalSeconds;
                     }
 
-                    // Sumar solo el tiempo histórico al total del proyecto
-                    totalSecondsProject += historicalSeconds;
+                    // Mostrar con estilo "pausado"
+                    if (totalTaskSeconds > 0) {
+                        timeCell.textContent = '⏸ ' + formatSeconds(totalTaskSeconds);
+                        timeCell.style.color = '#999';
+                        timeCell.style.fontWeight = 'normal';
+                    } else {
+                        timeCell.textContent = '--';
+                        timeCell.style.color = '#999';
+                        timeCell.style.fontWeight = 'normal';
+                    }
+
+                    // Sumar al total del proyecto
+                    totalSecondsProject += totalTaskSeconds;
                 }
             });
 

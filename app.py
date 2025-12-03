@@ -1458,6 +1458,55 @@ def get_tasks_time_tracking():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/tasks/time-tracking/batch', methods=['POST'])
+def get_tasks_time_tracking_batch():
+    """
+    Obtiene información de tiempo para un conjunto de tareas específicas
+    Acepta una lista de task_ids en el body y retorna el tiempo calculado para cada una
+    """
+    try:
+        data = request.json
+        task_ids = data.get('task_ids', [])
+
+        if not task_ids:
+            return jsonify({
+                'success': True,
+                'tasks': {}
+            })
+
+        result = {}
+        for task_id in task_ids:
+            try:
+                # Verificar que la tarea existe
+                task = db.get_task(task_id)
+                if not task:
+                    continue
+
+                # Calcular tiempo para esta tarea
+                time_data = db.calculate_task_time_in_progress(task_id)
+                result[task_id] = {
+                    'task_id': task_id,
+                    'task_name': task['name'],
+                    'total_seconds': time_data['total_seconds'],
+                    'current_session_start': time_data['current_session_start'],
+                    'is_currently_in_progress': time_data['is_currently_in_progress']
+                }
+            except Exception as e:
+                print(f"[ERROR] Error al procesar tarea {task_id}: {str(e)}")
+                continue
+
+        return jsonify({
+            'success': True,
+            'tasks': result
+        })
+
+    except Exception as e:
+        print(f"[ERROR] Error al obtener tiempos de tareas (batch): {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/task/<task_id>/time-tracking', methods=['GET'])
 def get_task_time_tracking(task_id):
     """
