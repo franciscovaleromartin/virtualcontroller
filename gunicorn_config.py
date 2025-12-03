@@ -1,5 +1,5 @@
 """
-Configuración de Gunicorn para Flask-SocketIO con gevent
+Configuración de Gunicorn para Flask
 """
 
 import multiprocessing
@@ -12,16 +12,16 @@ port = os.getenv('PORT', '10000')
 print(f"[Gunicorn Config] Puerto detectado: {port}", flush=True)
 print(f"[Gunicorn Config] Python: {sys.version}", flush=True)
 
-# Número de workers
-# Para gevent con SocketIO, usar 1 worker para evitar problemas de estado compartido
-workers = 1
+# Número de workers - usar múltiples workers para mejor rendimiento
+workers = min(multiprocessing.cpu_count() * 2 + 1, 4)
 
-# Tipo de worker - gevent para Flask-SocketIO con async_mode='gevent'
-worker_class = 'gevent'
+# Tipo de worker - gthread para aplicaciones Flask estándar
+worker_class = 'gthread'
+threads = 2
 
-# Timeout para mantener conexiones WebSocket vivas
-timeout = 300
-graceful_timeout = 120
+# Timeout para requests HTTP
+timeout = 120
+graceful_timeout = 30
 
 # Keep alive timeout
 keepalive = 5
@@ -36,15 +36,12 @@ loglevel = 'info'
 capture_output = True
 enable_stdio_inheritance = True
 
-# NO preload app para permitir monkey patching de gevent
-preload_app = False
+# Preload app para mejor rendimiento
+preload_app = True
 
 # Max requests before worker restart
 max_requests = 1000
 max_requests_jitter = 50
-
-# Worker connections
-worker_connections = 1000
 
 # Worker temporary directory (importante para Render)
 worker_tmp_dir = '/dev/shm'
@@ -53,6 +50,7 @@ def on_starting(server):
     """Called just before the master process is initialized."""
     print(f"[Gunicorn] Iniciando servidor en puerto {port}", flush=True)
     print(f"[Gunicorn] Bind address: {bind}", flush=True)
+    print(f"[Gunicorn] Workers: {workers}, Threads: {threads}", flush=True)
 
 def when_ready(server):
     """Called just after the server is started."""

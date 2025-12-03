@@ -1,5 +1,5 @@
 #!/bin/bash
-# Script de inicio para Flask-SocketIO con gevent en Render
+# Script de inicio para Flask en Render
 
 echo "[START] Iniciando Virtual Controller..."
 echo "[START] Puerto: $PORT"
@@ -19,7 +19,7 @@ if [ ! -f "gunicorn_config.py" ]; then
 fi
 
 echo "[START] ✓ Archivos verificados"
-echo "[START] Iniciando gunicorn con gevent worker..."
+echo "[START] Iniciando gunicorn con gthread workers..."
 
 # Iniciar gunicorn con configuración
 exec gunicorn -c gunicorn_config.py app:app
