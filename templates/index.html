@@ -479,21 +479,42 @@
             const selectedSpace = localStorage.getItem('selectedSpace');
             const selectedProject = localStorage.getItem('selectedProject');
 
+            console.log('[Restaurar] Space guardado:', selectedSpace, 'Proyecto guardado:', selectedProject);
+
             if (selectedSpace) {
                 const spaceSelect = document.getElementById('space-select');
+
+                // Esperar un momento para que las opciones estén cargadas
+                await new Promise(resolve => setTimeout(resolve, 100));
+
                 spaceSelect.value = selectedSpace;
+                console.log('[Restaurar] Space seleccionado:', spaceSelect.value);
 
                 // Cargar los proyectos del space seleccionado
                 await cargarProyectos(selectedSpace);
 
                 if (selectedProject) {
+                    // Esperar un momento para que las opciones de proyecto estén cargadas
+                    await new Promise(resolve => setTimeout(resolve, 100));
+
                     const projectSelect = document.getElementById('project-select');
                     projectSelect.value = selectedProject;
 
-                    // Cargar las tareas del proyecto seleccionado
-                    const projectData = JSON.parse(selectedProject);
-                    await cargarTareasProyecto(projectData.type, projectData.id);
+                    console.log('[Restaurar] Proyecto seleccionado:', projectSelect.value);
+
+                    // Verificar que el valor se haya establecido correctamente
+                    if (projectSelect.value === selectedProject) {
+                        console.log('[Restaurar] Cargando tareas del proyecto...');
+                        // Cargar las tareas del proyecto seleccionado
+                        const projectData = JSON.parse(selectedProject);
+                        await cargarTareasProyecto(projectData.type, projectData.id);
+                        console.log('[Restaurar] Tareas cargadas exitosamente');
+                    } else {
+                        console.warn('[Restaurar] No se pudo restaurar el proyecto seleccionado');
+                    }
                 }
+            } else {
+                console.log('[Restaurar] No hay selecciones previas para restaurar');
             }
         }
 
@@ -507,6 +528,12 @@
 
         async function fetchAndUpdateTimeTracking() {
             try {
+                // Verificar que tareasActuales esté definido y no esté vacío
+                if (!tareasActuales || tareasActuales.length === 0) {
+                    console.log('[Time Tracking] No hay tareas para actualizar');
+                    return;
+                }
+
                 // Obtener los IDs de todas las tareas actuales del proyecto
                 const taskIds = tareasActuales.map(tarea => tarea.id);
 
@@ -546,6 +573,14 @@
             }
             if (timeDataFetchInterval) {
                 clearInterval(timeDataFetchInterval);
+            }
+
+            console.log('[Time Tracking] Iniciando tracking para', tareasActuales?.length || 0, 'tareas');
+
+            // Verificar que tengamos tareas antes de continuar
+            if (!tareasActuales || tareasActuales.length === 0) {
+                console.warn('[Time Tracking] No hay tareas para trackear');
+                return;
             }
 
             // Obtener datos iniciales y esperar a que terminen
