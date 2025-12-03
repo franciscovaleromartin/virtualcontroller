@@ -32,6 +32,31 @@
             background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%);
             color: white;
             padding: 30px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-content {
+            flex: 1;
+        }
+
+        .btn-refresh {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+
+        .btn-refresh:hover {
+            background: white;
+            color: #ff6b35;
         }
 
         h1 {
@@ -338,8 +363,11 @@
 <body>
     <div class="container">
         <header>
-            <h1>Virtual Controller SIDN</h1>
-            <div class="subtitle">Sistema de monitoreo y alertas para ClickUp</div>
+            <div class="header-content">
+                <h1>Virtual Controller SIDN</h1>
+                <div class="subtitle">Sistema de monitoreo y alertas para ClickUp</div>
+            </div>
+            <button class="btn-refresh" onclick="refrescarPagina()">🔄 Refrescar</button>
         </header>
 
         <div class="content">
@@ -428,9 +456,51 @@
         let currentProjectId = null;
         let currentProjectType = null;
 
-        // Cargar Spaces al iniciar
-        document.addEventListener('DOMContentLoaded', function () {
-            cargarSpaces();
+        // Función para refrescar la página manteniendo los valores seleccionados
+        function refrescarPagina() {
+            // Guardar los valores actuales de los selectores
+            const spaceSelect = document.getElementById('space-select');
+            const projectSelect = document.getElementById('project-select');
+
+            if (spaceSelect.value) {
+                localStorage.setItem('selectedSpace', spaceSelect.value);
+            }
+
+            if (projectSelect.value) {
+                localStorage.setItem('selectedProject', projectSelect.value);
+            }
+
+            // Recargar la página
+            location.reload();
+        }
+
+        // Función para restaurar los valores seleccionados después de cargar
+        async function restaurarSelecciones() {
+            const selectedSpace = localStorage.getItem('selectedSpace');
+            const selectedProject = localStorage.getItem('selectedProject');
+
+            if (selectedSpace) {
+                const spaceSelect = document.getElementById('space-select');
+                spaceSelect.value = selectedSpace;
+
+                // Cargar los proyectos del space seleccionado
+                await cargarProyectos(selectedSpace);
+
+                if (selectedProject) {
+                    const projectSelect = document.getElementById('project-select');
+                    projectSelect.value = selectedProject;
+
+                    // Cargar las tareas del proyecto seleccionado
+                    const projectData = JSON.parse(selectedProject);
+                    await cargarTareasProyecto(projectData.type, projectData.id);
+                }
+            }
+        }
+
+        // Cargar Spaces al iniciar y restaurar selecciones
+        document.addEventListener('DOMContentLoaded', async function () {
+            await cargarSpaces();
+            await restaurarSelecciones();
         });
 
         // === Gestión de tiempo en vivo ===
@@ -594,7 +664,7 @@
         function formatSeconds(seconds) {
             const hours = Math.floor(seconds / 3600);
             const minutes = Math.floor((seconds % 3600) / 60);
-            const secs = seconds % 60;
+            const secs = Math.floor(seconds % 60);
             return `${hours}h ${minutes}m ${secs}s`;
         }
 
