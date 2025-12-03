@@ -4,6 +4,13 @@ Configuración de Gunicorn para Flask-SocketIO con gevent
 
 import multiprocessing
 import os
+import sys
+
+# Obtener puerto de la variable de entorno
+port = os.getenv('PORT', '5000')
+
+print(f"[Gunicorn Config] Puerto: {port}", flush=True)
+print(f"[Gunicorn Config] Python: {sys.version}", flush=True)
 
 # Número de workers
 # Para gevent con SocketIO, usar 1 worker para evitar problemas de estado compartido
@@ -12,23 +19,24 @@ workers = 1
 # Tipo de worker - gevent para Flask-SocketIO con async_mode='gevent'
 worker_class = 'gevent'
 
-# Timeout para mantener conexiones WebSocket vivas (mayor para WebSocket)
+# Timeout para mantener conexiones WebSocket vivas
 timeout = 120
 graceful_timeout = 120
 
 # Keep alive timeout
 keepalive = 5
 
-# Bind
-port = os.getenv('PORT', '5000')
+# Bind to all interfaces
 bind = f"0.0.0.0:{port}"
 
 # Logging
 accesslog = '-'
 errorlog = '-'
 loglevel = 'info'
+capture_output = True
+enable_stdio_inheritance = True
 
-# Preload app for better performance
+# NO preload app para permitir monkey patching de gevent
 preload_app = False
 
 # Max requests before worker restart
@@ -38,15 +46,27 @@ max_requests_jitter = 50
 # Worker connections
 worker_connections = 1000
 
+# Worker temporary directory (importante para Render)
+worker_tmp_dir = '/dev/shm'
+
 def on_starting(server):
     """Called just before the master process is initialized."""
-    print(f"[Gunicorn] Iniciando servidor en puerto {port}")
-    print(f"[Gunicorn] Bind address: {bind}")
+    print(f"[Gunicorn] Iniciando servidor en puerto {port}", flush=True)
+    print(f"[Gunicorn] Bind address: {bind}", flush=True)
 
 def when_ready(server):
     """Called just after the server is started."""
-    print(f"[Gunicorn] Servidor listo y escuchando en {bind}")
+    print(f"[Gunicorn] ✓ Servidor listo y escuchando en {bind}", flush=True)
+    print(f"[Gunicorn] ✓ Health check disponible en http://0.0.0.0:{port}/health", flush=True)
 
-def on_reload(server):
-    """Called to recycle workers during a reload."""
-    print("[Gunicorn] Recargando workers")
+def worker_int(worker):
+    """Called when a worker receives SIGINT or SIGQUIT."""
+    print(f"[Gunicorn] Worker {worker.pid} recibió señal de interrupción", flush=True)
+
+def worker_abort(worker):
+    """Called when a worker is killed due to a timeout."""
+    print(f"[Gunicorn] Worker {worker.pid} abortado por timeout", flush=True)
+
+def post_worker_init(worker):
+    """Called just after a worker has been forked."""
+    print(f"[Gunicorn] Worker {worker.pid} inicializado", flush=True)

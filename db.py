@@ -638,6 +638,10 @@ def calculate_task_time_in_progress(task_id):
 
 # Inicializar base de datos al importar el módulo
 try:
+    print("[DB] Inicializando base de datos...", flush=True)
     init_db()
+    print("[DB] Base de datos inicializada correctamente", flush=True)
 except Exception as e:
-    print(f"[ERROR] No se pudo inicializar la base de datos: {e}")
+    print(f"[DB ERROR] No se pudo inicializar la base de datos: {e}", flush=True)
+    import traceback
+    traceback.print_exc()
