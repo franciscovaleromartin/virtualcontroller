@@ -1205,8 +1205,18 @@ def obtener_tareas_de_lista(lista_id, headers):
 
                 # Calcular tiempo en estado "in progress" usando el historial
                 print(f"[INFO] Calculando tiempo para tarea: {tarea['name']} (ID: {tarea['id']})")
-                horas_trabajadas, minutos_trabajados = calcular_tiempo_en_progreso(tarea['id'], estado, headers)
-                print(f"[INFO] Tiempo calculado para tarea {tarea['id']}: {horas_trabajadas}h {minutos_trabajados}m")
+
+                # Obtener información completa del tiempo en progreso
+                time_data = db.calculate_task_time_in_progress(tarea['id'])
+                tiempo_total_segundos = time_data['total_seconds']
+                sesion_actual_inicio = time_data['current_session_start']
+                actualmente_en_progreso = time_data['is_currently_in_progress']
+
+                # Calcular horas y minutos para compatibilidad
+                horas_trabajadas = int(tiempo_total_segundos // 3600)
+                minutos_trabajados = int((tiempo_total_segundos % 3600) // 60)
+
+                print(f"[INFO] Tiempo calculado para tarea {tarea['id']}: {horas_trabajadas}h {minutos_trabajados}m (total: {tiempo_total_segundos}s, en progreso: {actualmente_en_progreso})")
 
                 # Obtener configuración de alerta para esta tarea desde el diccionario en memoria
                 alerta_config = alertas_tareas.get(tarea['id'], {
@@ -1225,6 +1235,10 @@ def obtener_tareas_de_lista(lista_id, headers):
                     'fecha_actualizacion': fecha_actualizacion,
                     'horas_trabajadas': int(horas_trabajadas),
                     'minutos_trabajados': int(minutos_trabajados),
+                    # Información completa para cálculo en tiempo real en el frontend
+                    'tiempo_total_segundos': tiempo_total_segundos,
+                    'sesion_actual_inicio': sesion_actual_inicio,
+                    'actualmente_en_progreso': actualmente_en_progreso,
                     'alerta': alerta_config
                 })
 

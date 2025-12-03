@@ -525,20 +525,37 @@
                     return;
                 }
 
-                // Obtener datos de tiempo de esta tarea
+                // Obtener datos de tiempo de esta tarea (del endpoint de time tracking o de los datos iniciales)
                 const taskData = timeTrackingData[tarea.id];
 
+                // Determinar si está en progreso y obtener datos
+                let isInProgress = false;
+                let totalSeconds = 0;
+                let sessionStart = null;
+
+                if (taskData) {
+                    // Usar datos del endpoint de time tracking (más preciso)
+                    isInProgress = taskData.is_currently_in_progress;
+                    totalSeconds = taskData.total_seconds;
+                    sessionStart = taskData.current_session_start;
+                } else {
+                    // Fallback: usar datos iniciales de la tarea
+                    isInProgress = tarea.actualmente_en_progreso || false;
+                    totalSeconds = tarea.tiempo_total_segundos || 0;
+                    sessionStart = tarea.sesion_actual_inicio;
+                }
+
                 // Si la tarea está en progreso AHORA
-                if (taskData && taskData.is_currently_in_progress) {
+                if (isInProgress) {
                     // Calcular tiempo adicional desde que empezó la sesión actual
                     let additionalSeconds = 0;
-                    if (taskData.current_session_start) {
-                        const sessionStart = new Date(taskData.current_session_start);
+                    if (sessionStart) {
+                        const sessionStartDate = new Date(sessionStart);
                         const now = new Date();
-                        additionalSeconds = Math.floor((now - sessionStart) / 1000);
+                        additionalSeconds = Math.floor((now - sessionStartDate) / 1000);
                     }
 
-                    const totalTaskSeconds = taskData.total_seconds + additionalSeconds;
+                    const totalTaskSeconds = totalSeconds + additionalSeconds;
 
                     // Actualizar celda de tiempo en vivo con estilo "activo"
                     timeCell.textContent = '▶ ' + formatSeconds(totalTaskSeconds);
@@ -549,15 +566,8 @@
                     totalSecondsProject += totalTaskSeconds;
                 } else {
                     // Para tareas que NO están en progreso, mostrar tiempo pausado
-                    // Usar taskData.total_seconds si existe, sino mostrar tiempo histórico de BD
-                    let totalTaskSeconds = 0;
-                    if (taskData) {
-                        totalTaskSeconds = taskData.total_seconds;
-                    } else {
-                        // Fallback: usar tiempo histórico de los datos de la tarea
-                        const historicalSeconds = (tarea.horas_trabajadas || 0) * 3600 + (tarea.minutos_trabajados || 0) * 60;
-                        totalTaskSeconds = historicalSeconds;
-                    }
+                    // Usar total_seconds (suma de todos los períodos cerrados)
+                    const totalTaskSeconds = totalSeconds;
 
                     // Mostrar con estilo "pausado"
                     if (totalTaskSeconds > 0) {
