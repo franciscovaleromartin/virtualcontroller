@@ -1,277 +1,179 @@
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Virtual Controller SIDN</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
-        }
-
-        header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px 40px;
-        }
-
-        h1 {
-            font-size: 2.5em;
-            font-weight: 700;
-            margin-bottom: 10px;
-        }
-
-        .subtitle {
-            opacity: 0.9;
-            font-size: 1.1em;
-        }
-
-        .content {
-            padding: 40px;
-        }
-
-        .selector-section {
-            margin-bottom: 30px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 10px;
-            font-weight: 600;
-            color: #333;
-            font-size: 1.1em;
-        }
-
-        select {
-            width: 100%;
-            padding: 12px 16px;
-            font-size: 16px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            background: white;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        select:hover {
-            border-color: #667eea;
-        }
-
-        select:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #667eea;
-            font-size: 1.2em;
-        }
-
-        .error {
-            background: #fee;
-            border: 2px solid #fcc;
-            color: #c33;
-            padding: 16px;
-            border-radius: 8px;
-            margin: 20px 0;
-        }
-
-        .table-container {
-            overflow-x: auto;
-            margin-top: 30px;
-            border-radius: 8px;
-            border: 1px solid #e0e0e0;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: white;
-        }
-
-        th {
-            background: #f8f9fa;
-            padding: 16px;
-            text-align: left;
-            font-weight: 600;
-            color: #495057;
-            border-bottom: 2px solid #e0e0e0;
-            font-size: 0.95em;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        td {
-            padding: 16px;
-            border-bottom: 1px solid #f0f0f0;
-            color: #333;
-        }
-
-        tr:hover {
-            background: #f8f9fa;
-        }
-
-        input[type="checkbox"] {
-            width: 20px;
-            height: 20px;
-            cursor: pointer;
-            accent-color: #667eea;
-        }
-
-        input[type="email"],
-        input[type="number"] {
-            width: 100%;
-            padding: 8px 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 6px;
-            font-size: 14px;
-            transition: all 0.3s;
-        }
-
-        input[type="email"]:focus,
-        input[type="number"]:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        .time-input {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-        }
-
-        .time-input input {
-            width: 60px;
-        }
-
-        .time-input span {
-            color: #666;
-            font-size: 14px;
-        }
-
-        .btn-save {
-            background: #667eea;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            transition: all 0.3s;
-        }
-
-        .btn-save:hover {
-            background: #5568d3;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-        }
-
-        .tarea-link {
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 500;
-            transition: color 0.3s;
-        }
-
-        .tarea-link:hover {
-            color: #764ba2;
-            text-decoration: underline;
-        }
-
-        .hidden {
-            display: none;
-        }
-
-        @media (max-width: 768px) {
-            .content {
-                padding: 20px;
-            }
-
-            h1 {
-                font-size: 1.8em;
-            }
-
-            table {
-                font-size: 14px;
-            }
-
-            th,
-            td {
-                padding: 12px 8px;
-            }
-        }
+        body { font-family: 'Inter', sans-serif; }
+        .bg-orange-brand { background-color: #F97316; }
+        .text-orange-brand { color: #F97316; }
+        .border-orange-brand { border-color: #F97316; }
+        .hover-bg-orange-brand:hover { background-color: #EA580C; }
+        .ring-orange-brand:focus { --tw-ring-color: #F97316; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     </style>
 </head>
+<body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col">
 
-<body>
-    <div class="container">
-        <header>
-            <h1>Virtual Controller SIDN</h1>
-            <div class="subtitle">Sistema de monitoreo y alertas para ClickUp</div>
-        </header>
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-orange-brand rounded-lg flex items-center justify-center text-white font-bold shadow-sm">V</div>
+                <h1 class="text-xl font-bold text-gray-900 tracking-tight">Virtual Controller</h1>
+            </div>
+            <div class="flex items-center gap-6">
+                <div class="hidden md:flex flex-col items-end">
+                    <span class="text-xs text-gray-500 uppercase font-semibold tracking-wider">Tiempo Total</span>
+                    <span id="total-time-global" class="font-bold text-gray-900 text-lg leading-none">0h 0m</span>
+                </div>
+                <div class="h-8 w-px bg-gray-200 hidden md:block"></div>
+                <a href="/logout" class="text-sm font-medium text-gray-500 hover:text-orange-600 transition-colors">Cerrar Sesión</a>
+            </div>
+        </div>
+    </header>
 
-        <div class="content">
-            <div class="selector-section">
-                <label for="space-select">Selecciona un Trabajo (Space):</label>
-                <select id="space-select">
-                    <option value="">Cargando espacios...</option>
-                </select>
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+        
+        <!-- Dashboard Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <!-- Active Tasks Card -->
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="text-gray-500 text-xs font-bold uppercase tracking-wider mb-1">Tareas en Progreso</h3>
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-3xl font-bold text-gray-900" id="active-tasks-count">0</span>
+                            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700">Activas</span>
+                        </div>
+                    </div>
+                    <div class="p-2 bg-orange-50 rounded-lg text-orange-500">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                </div>
             </div>
 
-            <div id="error-message" class="error hidden"></div>
-            <div id="loading" class="loading hidden">Cargando listas...</div>
+            <!-- Monitored Lists Card -->
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="text-gray-500 text-xs font-bold uppercase tracking-wider mb-1">Listas Monitoreadas</h3>
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-3xl font-bold text-gray-900" id="monitored-lists-count">0</span>
+                            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Configuradas</span>
+                        </div>
+                    </div>
+                    <div class="p-2 bg-blue-50 rounded-lg text-blue-500">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                    </div>
+                </div>
+            </div>
 
-            <div id="table-container" class="table-container hidden">
-                <table id="lists-table">
-                    <thead>
+            <!-- Alerts Sent Card (Placeholder) -->
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="text-gray-500 text-xs font-bold uppercase tracking-wider mb-1">Estado del Sistema</h3>
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-lg font-bold text-green-600">Operativo</span>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-1">Verificando cada 5 min</p>
+                    </div>
+                    <div class="p-2 bg-green-50 rounded-lg text-green-500">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="p-6 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gray-50/50">
+                <div>
+                    <h2 class="text-lg font-bold text-gray-900">Gestión de Tareas</h2>
+                    <p class="text-sm text-gray-500">Selecciona un espacio para ver y configurar alertas</p>
+                </div>
+                <div class="w-full sm:w-72">
+                    <select id="space-select" class="w-full rounded-lg border-gray-300 border px-4 py-2.5 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all bg-white shadow-sm">
+                        <option value="">Cargando espacios...</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="loading" class="hidden py-16 text-center text-gray-500">
+                <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-orange-500 mx-auto mb-4"></div>
+                <p class="text-sm font-medium">Cargando listas y tareas...</p>
+            </div>
+
+            <div id="error-message" class="hidden m-6 p-4 bg-red-50 text-red-700 rounded-lg border border-red-100 flex items-center gap-3">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                </svg>
+                <span id="error-text">Error message here</span>
+            </div>
+
+            <div id="table-container" class="hidden overflow-x-auto">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-gray-50 text-gray-500 font-semibold border-b border-gray-200 uppercase text-xs tracking-wider">
                         <tr>
-                            <th>Lista</th>
-                            <th>Última Actualización</th>
-                            <th>Título Última Tarea</th>
-                            <th style="text-align: center;">Activar Aviso</th>
-                            <th>Avisar a (Email)</th>
-                            <th>Avisar en</th>
-                            <th style="text-align: center;">Acciones</th>
+                            <th class="px-6 py-4">Lista</th>
+                            <th class="px-6 py-4">Última Tarea</th>
+                            <th class="px-6 py-4 text-center">Estado</th>
+                            <th class="px-6 py-4">Configuración Alerta</th>
+                            <th class="px-6 py-4 text-center">Acciones</th>
                         </tr>
                     </thead>
-                    <tbody id="lists-tbody">
+                    <tbody id="lists-tbody" class="divide-y divide-gray-100">
+                        <!-- Rows injected by JS -->
                     </tbody>
                 </table>
             </div>
+            
+            <!-- Empty State -->
+            <div id="empty-state" class="py-16 text-center text-gray-400 hidden">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto mb-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                <p class="text-lg font-medium text-gray-500">No hay listas seleccionadas</p>
+                <p class="text-sm">Selecciona un espacio arriba para comenzar</p>
+            </div>
         </div>
-    </div>
+    </main>
 
     <script>
-        // Cargar Spaces al iniciar
         document.addEventListener('DOMContentLoaded', function () {
             cargarSpaces();
+            // Poll dashboard stats every 30s
+            setInterval(updateDashboardStats, 30000);
+            updateDashboardStats();
         });
 
-        // Función para cargar spaces
+        async function updateDashboardStats() {
+            try {
+                const response = await fetch('/api/dashboard');
+                const data = await response.json();
+                if (data.monitored_lists !== undefined) {
+                    document.getElementById('monitored-lists-count').textContent = data.monitored_lists;
+                }
+            } catch (e) {
+                console.error("Error updating stats", e);
+            }
+        }
+
         async function cargarSpaces() {
             try {
                 const response = await fetch('/api/spaces');
@@ -292,28 +194,33 @@
                     select.appendChild(option);
                 });
 
-                // Event listener para cuando se selecciona un space
                 select.addEventListener('change', function () {
                     if (this.value) {
                         cargarListas(this.value);
+                        document.getElementById('empty-state').classList.add('hidden');
                     } else {
                         document.getElementById('table-container').classList.add('hidden');
+                        document.getElementById('empty-state').classList.remove('hidden');
                     }
                 });
+                
+                // Show empty state initially
+                document.getElementById('empty-state').classList.remove('hidden');
 
             } catch (error) {
                 mostrarError('Error al cargar los espacios: ' + error.message);
             }
         }
 
-        // Función para cargar listas de un space
         async function cargarListas(spaceId) {
             const loading = document.getElementById('loading');
             const tableContainer = document.getElementById('table-container');
             const tbody = document.getElementById('lists-tbody');
+            const emptyState = document.getElementById('empty-state');
 
             loading.classList.remove('hidden');
             tableContainer.classList.add('hidden');
+            emptyState.classList.add('hidden');
             ocultarError();
 
             try {
@@ -327,48 +234,64 @@
                 }
 
                 tbody.innerHTML = '';
+                
+                // Calculate local stats
+                let activeTasks = 0;
+                let totalTime = 0; // This would need task-level data which we might not have fully here
 
                 data.lists.forEach(lista => {
                     const tr = document.createElement('tr');
+                    tr.className = "hover:bg-gray-50 transition-colors group";
+                    
                     tr.innerHTML = `
-                        <td><strong>${lista.nombre}</strong></td>
-                        <td>${lista.ultima_actualizacion}</td>
-                        <td>
-                            ${lista.enlace_tarea ?
-                            `<a href="${lista.enlace_tarea}" target="_blank" class="tarea-link">${lista.titulo_ultima}</a>` :
-                            lista.titulo_ultima
-                        }
+                        <td class="px-6 py-4">
+                            <div class="font-medium text-gray-900">${lista.nombre}</div>
+                            <div class="text-xs text-gray-500 mt-0.5">ID: ${lista.id}</div>
                         </td>
-                        <td style="text-align: center;">
-                            <input type="checkbox" 
-                                   id="check-${lista.id}" 
-                                   ${lista.alerta.activa ? 'checked' : ''}>
-                        </td>
-                        <td>
-                            <input type="email" 
-                                   id="email-${lista.id}" 
-                                   placeholder="correo@ejemplo.com"
-                                   value="${lista.alerta.email}">
-                        </td>
-                        <td>
-                            <div class="time-input">
-                                <input type="number" 
-                                       id="horas-${lista.id}" 
-                                       min="0" 
-                                       placeholder="0"
-                                       value="${lista.alerta.horas}">
-                                <span>h</span>
-                                <input type="number" 
-                                       id="minutos-${lista.id}" 
-                                       min="0" 
-                                       max="59" 
-                                       placeholder="0"
-                                       value="${lista.alerta.minutos}">
-                                <span>min</span>
+                        <td class="px-6 py-4">
+                            <div class="text-sm text-gray-900 font-medium truncate max-w-xs" title="${lista.titulo_ultima}">
+                                ${lista.enlace_tarea ? 
+                                    `<a href="${lista.enlace_tarea}" target="_blank" class="text-orange-600 hover:text-orange-800 hover:underline">${lista.titulo_ultima}</a>` : 
+                                    lista.titulo_ultima}
+                            </div>
+                            <div class="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                ${lista.ultima_actualizacion}
                             </div>
                         </td>
-                        <td style="text-align: center;">
-                            <button class="btn-save" onclick="guardarAlerta('${lista.id}')">
+                        <td class="px-6 py-4 text-center">
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="check-${lista.id}" class="sr-only peer" ${lista.alerta.activa ? 'checked' : ''}>
+                                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+                            </label>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="space-y-3">
+                                <input type="email" 
+                                       id="email-${lista.id}" 
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
+                                       placeholder="correo@ejemplo.com"
+                                       value="${lista.alerta.email}">
+                                
+                                <div class="flex items-center gap-2">
+                                    <div class="relative flex-1">
+                                        <input type="number" id="horas-${lista.id}" min="0" placeholder="0" value="${lista.alerta.horas}"
+                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all pr-8">
+                                        <span class="absolute right-3 top-2 text-xs text-gray-400 font-medium">H</span>
+                                    </div>
+                                    <div class="relative flex-1">
+                                        <input type="number" id="minutos-${lista.id}" min="0" max="59" placeholder="0" value="${lista.alerta.minutos}"
+                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all pr-10">
+                                        <span class="absolute right-3 top-2 text-xs text-gray-400 font-medium">MIN</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-center">
+                            <button onclick="guardarAlerta('${lista.id}')" 
+                                    class="text-white bg-orange-500 hover:bg-orange-600 focus:ring-4 focus:ring-orange-300 font-medium rounded-lg text-sm px-4 py-2 transition-all shadow-sm hover:shadow-md transform hover:-translate-y-0.5">
                                 Guardar
                             </button>
                         </td>
@@ -385,24 +308,28 @@
             }
         }
 
-        // Función para guardar alerta
         async function guardarAlerta(listaId) {
             const activa = document.getElementById(`check-${listaId}`).checked;
             const email = document.getElementById(`email-${listaId}`).value;
             const horas = document.getElementById(`horas-${listaId}`).value || 0;
             const minutos = document.getElementById(`minutos-${listaId}`).value || 0;
+            
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.textContent = 'Guardando...';
+            btn.disabled = true;
 
             if (activa && !email) {
                 alert('Por favor, introduce un email para recibir las alertas');
+                btn.textContent = originalText;
+                btn.disabled = false;
                 return;
             }
 
             try {
                 const response = await fetch('/api/alerta/guardar', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         lista_id: listaId,
                         activa: activa,
@@ -415,20 +342,36 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    alert('✓ Alerta guardada correctamente');
+                    // Show success feedback
+                    btn.textContent = '¡Guardado!';
+                    btn.classList.remove('bg-orange-500', 'hover:bg-orange-600');
+                    btn.classList.add('bg-green-500', 'hover:bg-green-600');
+                    setTimeout(() => {
+                        btn.textContent = originalText;
+                        btn.classList.add('bg-orange-500', 'hover:bg-orange-600');
+                        btn.classList.remove('bg-green-500', 'hover:bg-green-600');
+                        btn.disabled = false;
+                    }, 2000);
+                    
+                    // Refresh stats
+                    updateDashboardStats();
                 } else {
                     alert('Error al guardar: ' + (data.error || 'Error desconocido'));
+                    btn.textContent = originalText;
+                    btn.disabled = false;
                 }
 
             } catch (error) {
                 alert('Error al guardar la alerta: ' + error.message);
+                btn.textContent = originalText;
+                btn.disabled = false;
             }
         }
 
-        // Funciones auxiliares
         function mostrarError(mensaje) {
             const errorDiv = document.getElementById('error-message');
-            errorDiv.textContent = mensaje;
+            const errorText = document.getElementById('error-text');
+            errorText.textContent = mensaje;
             errorDiv.classList.remove('hidden');
         }
 
@@ -437,5 +380,4 @@
         }
     </script>
 </body>
-
 </html>

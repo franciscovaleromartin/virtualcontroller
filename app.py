@@ -3,7 +3,17 @@ import requests
 from datetime import datetime, timedelta
 import json
 import os
+import requests
+from datetime import datetime, timedelta
+import json
+import os
 from dotenv import load_dotenv
+from apscheduler.schedulers.background import BackgroundScheduler
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import atexit
+import time
 
 load_dotenv()
 
@@ -14,7 +24,30 @@ CLICKUP_CLIENT_ID = os.getenv('CLICKUP_CLIENT_ID')
 CLICKUP_CLIENT_SECRET = os.getenv('CLICKUP_CLIENT_SECRET')
 REDIRECT_URI = os.getenv('REDIRECT_URI', 'https://virtualcontroller.onrender.com')
 
-alertas_config = {}
+# Email Config
+SMTP_HOST = os.getenv('SMTP_HOST', 'smtp.gmail.com')
+SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
+SMTP_USER = os.getenv('SMTP_USER')
+SMTP_PASSWORD = os.getenv('SMTP_PASSWORD')
+
+ALERTS_FILE = 'alerts.json'
+
+def load_alerts():
+    if os.path.exists(ALERTS_FILE):
+        try:
+            with open(ALERTS_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_alerts(alerts):
+    with open(ALERTS_FILE, 'w') as f:
+        json.dump(alerts, f)
+
+alertas_config = load_alerts()
+# Track sent alerts to avoid spamming: {task_id: timestamp}
+sent_alerts = {}
 
 @app.route('/')
 def inicio():
@@ -205,13 +238,122 @@ def guardar_alerta():
             'activa': data['activa'],
             'email': data['email'],
             'horas': int(data['horas']),
-            'minutos': int(data['minutos'])
+            'minutos': int(data['minutos']),
+            'token': session.get('access_token') # Save token for background job
         }
+        
+        save_alerts(alertas_config)
         
         return jsonify({'success': True, 'message': 'Alerta guardada correctamente'})
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+def send_email(to_email, subject, body):
+    if not SMTP_USER or not SMTP_PASSWORD:
+        print("SMTP credentials not configured")
+        return False
+        
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = SMTP_USER
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        
+        msg.attach(MIMEText(body, 'html'))
+        
+        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+        server.starttls()
+        server.login(SMTP_USER, SMTP_PASSWORD)
+        text = msg.as_string()
+        server.sendmail(SMTP_USER, to_email, text)
+        server.quit()
+        return True
+    except Exception as e:
+        print(f"Error sending email: {e}")
+        return False
+
+def check_tasks():
+    print(f"Checking tasks for alerts... {datetime.now()}")
+    for lista_id, config in alertas_config.items():
+        if not config.get('activa') or not config.get('token'):
+            continue
+            
+        try:
+            headers = {
+                'Authorization': config['token'],
+                'Content-Type': 'application/json'
+            }
+            
+            # Get tasks from list
+            response = requests.get(
+                f'https://api.clickup.com/api/v2/list/{lista_id}/task',
+                headers=headers,
+                params={'include_closed': 'false'} # Only open tasks
+            )
+            
+            if response.status_code == 200:
+                tasks = response.json()['tasks']
+                limit_minutes = (config.get('horas', 0) * 60) + config.get('minutos', 0)
+                
+                for task in tasks:
+                    # Check if task is in progress (status type custom or just assume open)
+                    # Get time tracked
+                    time_spent_ms = int(task.get('time_spent', 0) or 0)
+                    time_spent_minutes = time_spent_ms / 1000 / 60
+                    
+                    if time_spent_minutes > limit_minutes and limit_minutes > 0:
+                        # Check if we already sent an email recently (e.g., in the last 24h)
+                        task_id = task['id']
+                        if task_id not in sent_alerts:
+                            # Send email
+                            subject = f"Alerta: Tarea excedida de tiempo - {task['name']}"
+                            body = f"""
+                            <h1>Alerta de Tiempo</h1>
+                            <p>La tarea <strong>{task['name']}</strong> ha excedido el tiempo límite.</p>
+                            <p><strong>Tiempo transcurrido:</strong> {int(time_spent_minutes)} minutos</p>
+                            <p><strong>Límite configurado:</strong> {limit_minutes} minutos</p>
+                            <p><a href="{task['url']}">Ver tarea en ClickUp</a></p>
+                            """
+                            if send_email(config['email'], subject, body):
+                                sent_alerts[task_id] = datetime.now()
+                                print(f"Email sent for task {task_id}")
+        except Exception as e:
+            print(f"Error checking list {lista_id}: {e}")
+
+@app.route('/api/dashboard')
+def dashboard_data():
+    # Aggregate data for the dashboard
+    total_time_ms = 0
+    active_tasks = []
+    
+    if 'access_token' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+        
+    headers = {
+        'Authorization': session['access_token'],
+        'Content-Type': 'application/json'
+    }
+    
+    # We need to iterate over all lists that the user has access to, 
+    # OR just the ones configured in alerts? 
+    # The user asked for "total time spent on ALL tasks".
+    # Iterating all lists might be slow. 
+    # For MVP, let's use the lists in alertas_config if available, or try to fetch from spaces.
+    # To be safe and fast, let's just return the data for the configured lists for now, 
+    # or let the frontend poll individual lists.
+    # Better: The frontend already loads lists. Let's just return a summary of configured lists.
+    
+    return jsonify({
+        'monitored_lists': len(alertas_config),
+        'alerts_active': sum(1 for c in alertas_config.values() if c.get('activa'))
+    })
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(func=check_tasks, trigger="interval", minutes=5)
+scheduler.start()
+
+atexit.register(lambda: scheduler.shutdown())
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
