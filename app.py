@@ -335,19 +335,18 @@ def dashboard_data():
         'Content-Type': 'application/json'
     }
     
-    # We need to iterate over all lists that the user has access to, 
-    # OR just the ones configured in alerts? 
-    # The user asked for "total time spent on ALL tasks".
-    # Iterating all lists might be slow. 
-    # For MVP, let's use the lists in alertas_config if available, or try to fetch from spaces.
-    # To be safe and fast, let's just return the data for the configured lists for now, 
-    # or let the frontend poll individual lists.
-    # Better: The frontend already loads lists. Let's just return a summary of configured lists.
-    
     return jsonify({
         'monitored_lists': len(alertas_config),
         'alerts_active': sum(1 for c in alertas_config.values() if c.get('activa'))
     })
+
+@app.route('/api/verificar-alertas', methods=['POST'])
+def webhook_verificar_alertas():
+    try:
+        check_tasks()
+        return jsonify({'status': 'success', 'message': 'Verificación de alertas ejecutada'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=check_tasks, trigger="interval", minutes=5)
