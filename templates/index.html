@@ -14,7 +14,7 @@
 
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            background: linear-gradient(135deg, #ffffff 0%, #fff5f0 100%);
             min-height: 100vh;
             padding: 20px;
         }
@@ -29,7 +29,7 @@
         }
 
         header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%);
             color: white;
             padding: 30px 40px;
         }
@@ -73,19 +73,19 @@
         }
 
         select:hover {
-            border-color: #667eea;
+            border-color: #ff6b35;
         }
 
         select:focus {
             outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            border-color: #ff6b35;
+            box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
         }
 
         .loading {
             text-align: center;
             padding: 40px;
-            color: #667eea;
+            color: #ff6b35;
             font-size: 1.2em;
         }
 
@@ -150,7 +150,7 @@
         }
 
         .btn-config {
-            background: #667eea;
+            background: #ff6b35;
             color: white;
             border: none;
             padding: 6px 12px;
@@ -161,7 +161,7 @@
         }
 
         .btn-config:hover {
-            background: #5568d3;
+            background: #ff5722;
         }
 
         .modal {
@@ -190,7 +190,7 @@
         }
 
         .modal-header h2 {
-            color: #667eea;
+            color: #ff6b35;
             font-size: 1.5em;
         }
 
@@ -246,12 +246,12 @@
         }
 
         .btn-primary {
-            background: #667eea;
+            background: #ff6b35;
             color: white;
         }
 
         .btn-primary:hover {
-            background: #5568d3;
+            background: #ff5722;
         }
 
         .btn-secondary {
@@ -282,12 +282,12 @@
             padding: 20px;
             background: #f8f9fa;
             border-radius: 8px;
-            border: 2px solid #667eea;
+            border: 2px solid #ff6b35;
             text-align: center;
         }
 
         .total-horas h3 {
-            color: #667eea;
+            color: #ff6b35;
             font-size: 1.5em;
             margin-bottom: 10px;
         }
@@ -299,14 +299,14 @@
         }
 
         .tarea-link {
-            color: #667eea;
+            color: #ff6b35;
             text-decoration: none;
             font-weight: 500;
             transition: color 0.3s;
         }
 
         .tarea-link:hover {
-            color: #764ba2;
+            color: #ff5722;
             text-decoration: underline;
         }
 
@@ -340,9 +340,6 @@
         <header>
             <h1>Virtual Controller SIDN</h1>
             <div class="subtitle">Sistema de monitoreo y alertas para ClickUp</div>
-            <button onclick="testWebSocket()" style="position: absolute; top: 20px; right: 20px; padding: 10px 20px; background: rgba(255,255,255,0.2); color: white; border: 2px solid white; border-radius: 8px; cursor: pointer; font-weight: bold;">
-                🔌 Test WebSocket
-            </button>
         </header>
 
         <div class="content">
@@ -428,6 +425,7 @@
         // Variables globales para manejo de tiempo real
         let timeTrackingData = {}; // {task_id: {total_seconds, current_session_start, is_currently_in_progress}}
         let timeUpdateInterval = null;
+        let timeDataFetchInterval = null;
         let currentProjectId = null;
         let currentProjectType = null;
 
@@ -456,20 +454,33 @@
             // Obtener datos iniciales
             fetchAndUpdateTimeTracking();
 
-            // Actualizar cada segundo
+            // Limpiar intervalos anteriores si existen
             if (timeUpdateInterval) {
                 clearInterval(timeUpdateInterval);
             }
+            if (timeDataFetchInterval) {
+                clearInterval(timeDataFetchInterval);
+            }
 
+            // Actualizar displays cada segundo
             timeUpdateInterval = setInterval(() => {
                 updateAllTimeDisplays();
             }, 1000);
+
+            // Actualizar datos de estado cada 5 segundos para detectar cambios de estado
+            timeDataFetchInterval = setInterval(() => {
+                fetchAndUpdateTimeTracking();
+            }, 5000);
         }
 
         function stopTimeTracking() {
             if (timeUpdateInterval) {
                 clearInterval(timeUpdateInterval);
                 timeUpdateInterval = null;
+            }
+            if (timeDataFetchInterval) {
+                clearInterval(timeDataFetchInterval);
+                timeDataFetchInterval = null;
             }
         }
 
@@ -481,11 +492,13 @@
                 // Sumar el tiempo histórico de cada tarea (convertir horas y minutos a segundos)
                 const historicalSeconds = (tarea.horas_trabajadas * 3600) + (tarea.minutos_trabajados * 60);
 
+                const row = document.querySelector(`tr[data-task-id="${tarea.id}"]`);
+                const timeCell = row ? row.cells[3] : null;
+
                 // Si la tarea está en progreso, actualizar su celda y agregar tiempo adicional
                 const taskData = timeTrackingData[tarea.id];
                 if (taskData && taskData.is_currently_in_progress) {
-                    const row = document.querySelector(`tr[data-task-id="${tarea.id}"]`);
-                    if (row) {
+                    if (row && timeCell) {
                         // Calcular tiempo adicional desde que empezó la sesión actual
                         let additionalSeconds = 0;
                         if (taskData.current_session_start) {
@@ -496,19 +509,36 @@
 
                         const totalTaskSeconds = taskData.total_seconds + additionalSeconds;
 
-                        // Actualizar celda de tiempo en vivo (columna 3)
-                        const timeCell = row.cells[3];
-                        if (timeCell) {
-                            timeCell.textContent = formatSeconds(totalTaskSeconds);
-                            timeCell.style.color = '#667eea';
-                            timeCell.style.fontWeight = 'bold';
-                        }
+                        // Actualizar celda de tiempo en vivo con estilo "activo"
+                        timeCell.textContent = '▶ ' + formatSeconds(totalTaskSeconds);
+                        timeCell.style.color = '#ff6b35';
+                        timeCell.style.fontWeight = 'bold';
 
                         // Sumar al total del proyecto
                         totalSecondsProject += totalTaskSeconds;
                     }
                 } else {
-                    // Para tareas que no están en progreso, solo sumar el tiempo histórico
+                    // Para tareas que NO están en progreso, mostrar tiempo pausado
+                    if (row && timeCell) {
+                        // Mostrar el tiempo acumulado total (histórico + lo que haya en taskData si existe)
+                        let totalTaskSeconds = historicalSeconds;
+                        if (taskData) {
+                            totalTaskSeconds = taskData.total_seconds;
+                        }
+
+                        // Mostrar con estilo "pausado"
+                        if (totalTaskSeconds > 0) {
+                            timeCell.textContent = '⏸ ' + formatSeconds(totalTaskSeconds);
+                            timeCell.style.color = '#999';
+                            timeCell.style.fontWeight = 'normal';
+                        } else {
+                            timeCell.textContent = '--';
+                            timeCell.style.color = '#999';
+                            timeCell.style.fontWeight = 'normal';
+                        }
+                    }
+
+                    // Sumar solo el tiempo histórico al total del proyecto
                     totalSecondsProject += historicalSeconds;
                 }
             });
@@ -878,31 +908,6 @@
             }, 5000); // 5 segundos después de cargar las tareas
         }
 
-        // Función de prueba para WebSocket
-        async function testWebSocket() {
-            console.log('[TEST] Enviando petición de prueba WebSocket...');
-            try {
-                const response = await fetch('/api/test-websocket', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                });
-
-                const result = await response.json();
-                console.log('[TEST] Respuesta del servidor:', result);
-
-                if (result.success) {
-                    console.log('[TEST] El servidor emitió el evento. Esperando recepción en cliente...');
-                } else {
-                    console.error('[TEST] Error del servidor:', result.error);
-                    alert('Error al enviar test: ' + result.error);
-                }
-            } catch (error) {
-                console.error('[TEST] Error en la petición:', error);
-                alert('Error al enviar test: ' + error.message);
-            }
-        }
     </script>
 </body>
 
