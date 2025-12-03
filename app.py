@@ -547,11 +547,14 @@ def webhook_clickup():
 
         print(f"[INFO] Procesando evento '{event_type}' (webhook_log_id: {webhook_log_id})")
 
+        # Extraer el timestamp del webhook (viene de Make.com en el nivel superior)
+        webhook_timestamp = data.get('timestamp')
+
         # Procesar según el tipo de evento
         result = None
 
         if 'task' in event_type.lower():
-            result = process_task_event(event_type, data)
+            result = process_task_event(event_type, data, webhook_timestamp)
         elif 'list' in event_type.lower():
             result = process_list_event(event_type, data)
         elif 'folder' in event_type.lower():
@@ -585,8 +588,15 @@ def webhook_clickup():
         return jsonify({'error': 'Internal Server Error', 'message': error_msg}), 500
 
 
-def process_task_event(event_type, data):
-    """Procesa eventos relacionados con tareas"""
+def process_task_event(event_type, data, webhook_timestamp=None):
+    """
+    Procesa eventos relacionados con tareas
+
+    Args:
+        event_type: Tipo de evento (taskCreated, taskUpdated, etc.)
+        data: Datos del webhook
+        webhook_timestamp: Timestamp del webhook en formato ISO (opcional)
+    """
     task_id = data.get('task_id')
 
     if not task_id:
@@ -665,14 +675,25 @@ def process_task_event(event_type, data):
 
     # Registrar cambio de estado si ha cambiado
     if old_status != estado:
+        # Usar el timestamp del webhook si está disponible, sino parse_date_flexible del date_updated
+        changed_at_timestamp = None
+        if webhook_timestamp:
+            # El timestamp del webhook ya viene en formato ISO
+            changed_at_timestamp = parse_date_flexible(webhook_timestamp)
+            print(f"[INFO] Usando timestamp del webhook para cambio de estado: {changed_at_timestamp}")
+        elif date_updated:
+            changed_at_timestamp = parse_date_flexible(date_updated)
+            print(f"[INFO] Usando date_updated para cambio de estado: {changed_at_timestamp}")
+
         db.save_status_change(
             task_id=task_id,
             old_status=old_status,
             new_status=estado,
             old_status_text=old_status_text,
-            new_status_text=data.get('status', 'Sin estado')
+            new_status_text=data.get('status', 'Sin estado'),
+            changed_at=changed_at_timestamp
         )
-        print(f"[INFO] Cambio de estado registrado: {task_id} de '{old_status}' a '{estado}'")
+        print(f"[INFO] Cambio de estado registrado: {task_id} de '{old_status}' a '{estado}' en {changed_at_timestamp}")
 
     # Guardar en caché para acceso rápido
     tareas_cache[task_id] = {

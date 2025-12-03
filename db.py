@@ -531,16 +531,38 @@ def get_webhook_stats():
 
 # === FUNCIONES PARA TASK STATUS HISTORY ===
 
-def save_status_change(task_id, old_status, new_status, old_status_text=None, new_status_text=None):
-    """Registra un cambio de estado de una tarea"""
+def save_status_change(task_id, old_status, new_status, old_status_text=None, new_status_text=None, changed_at=None):
+    """
+    Registra un cambio de estado de una tarea
+
+    Args:
+        task_id: ID de la tarea
+        old_status: Estado anterior
+        new_status: Nuevo estado
+        old_status_text: Texto del estado anterior (opcional)
+        new_status_text: Texto del nuevo estado (opcional)
+        changed_at: Timestamp del cambio en formato ISO (opcional, usa CURRENT_TIMESTAMP si no se proporciona)
+    """
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO task_status_history (
-                task_id, old_status, new_status, old_status_text, new_status_text, changed_at
-            )
-            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        """, (task_id, old_status, new_status, old_status_text, new_status_text))
+
+        if changed_at:
+            # Usar el timestamp proporcionado
+            cursor.execute("""
+                INSERT INTO task_status_history (
+                    task_id, old_status, new_status, old_status_text, new_status_text, changed_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (task_id, old_status, new_status, old_status_text, new_status_text, changed_at))
+        else:
+            # Usar CURRENT_TIMESTAMP si no se proporciona
+            cursor.execute("""
+                INSERT INTO task_status_history (
+                    task_id, old_status, new_status, old_status_text, new_status_text, changed_at
+                )
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """, (task_id, old_status, new_status, old_status_text, new_status_text))
+
         conn.commit()
         return cursor.lastrowid
 
