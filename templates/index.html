@@ -379,9 +379,7 @@
                     </tbody>
                 </table>
                 <div id="total-tiempo-container" class="total-horas hidden">
-                    <h3>Tiempo Total del Trabajo</h3>
-                    <div class="valor" id="total-tiempo">0h 0m</div>
-                    <h3 style="margin-top: 20px;">Tiempo Total en Progreso (En Vivo)</h3>
+                    <h3>Tiempo Total del Proyecto</h3>
                     <div class="valor" id="total-tiempo-en-progreso">0h 0m 0s</div>
                 </div>
             </div>
@@ -426,12 +424,8 @@
         </div>
     </div>
 
-    <!-- Socket.IO Client -->
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-
     <script>
         // Variables globales para manejo de tiempo real
-        let socket = null;
         let timeTrackingData = {}; // {task_id: {total_seconds, current_session_start, is_currently_in_progress}}
         let timeUpdateInterval = null;
         let currentProjectId = null;
@@ -439,230 +433,8 @@
 
         // Cargar Spaces al iniciar
         document.addEventListener('DOMContentLoaded', function () {
-            initializeSocketIO();
             cargarSpaces();
         });
-
-        // Inicializar WebSocket
-        function initializeSocketIO() {
-            socket = io({
-                transports: ['websocket', 'polling']
-            });
-
-            socket.on('connect', () => {
-                console.log('[WebSocket] Conectado al servidor');
-            });
-
-            socket.on('disconnect', () => {
-                console.log('[WebSocket] Desconectado del servidor');
-            });
-
-            // Escuchar eventos de tareas
-            socket.on('task_created', (data) => {
-                console.log('[WebSocket] Tarea creada:', data);
-                handleTaskCreated(data);
-            });
-
-            socket.on('task_updated', (data) => {
-                console.log('[WebSocket] Tarea actualizada:', data);
-                handleTaskUpdated(data);
-            });
-
-            socket.on('task_deleted', (data) => {
-                console.log('[WebSocket] Tarea eliminada:', data);
-                handleTaskDeleted(data);
-            });
-
-            // Escuchar eventos de proyectos
-            socket.on('project_created', (data) => {
-                console.log('[WebSocket] Proyecto creado:', data);
-                handleProjectCreated(data);
-            });
-
-            socket.on('project_updated', (data) => {
-                console.log('[WebSocket] Proyecto actualizado:', data);
-                handleProjectUpdated(data);
-            });
-
-            socket.on('project_deleted', (data) => {
-                console.log('[WebSocket] Proyecto eliminado:', data);
-                handleProjectDeleted(data);
-            });
-
-            // Escuchar eventos de espacios
-            socket.on('space_created', (data) => {
-                console.log('[WebSocket] Espacio creado:', data);
-                handleSpaceCreated(data);
-            });
-
-            socket.on('space_updated', (data) => {
-                console.log('[WebSocket] Espacio actualizado:', data);
-                handleSpaceUpdated(data);
-            });
-
-            socket.on('space_deleted', (data) => {
-                console.log('[WebSocket] Espacio eliminado:', data);
-                handleSpaceDeleted(data);
-            });
-
-            // Evento de prueba para debugging
-            socket.on('test_event', (data) => {
-                console.log('[WebSocket] ✅ TEST EXITOSO - Evento recibido:', data);
-                alert('WebSocket funciona! Evento recibido: ' + data.message);
-            });
-
-            // Log de errores de conexión
-            socket.on('connect_error', (error) => {
-                console.error('[WebSocket] ❌ Error de conexión:', error);
-            });
-
-            socket.on('error', (error) => {
-                console.error('[WebSocket] ❌ Error:', error);
-            });
-        }
-
-        // === Handlers de eventos WebSocket ===
-
-        function handleTaskCreated(data) {
-            // Si la tarea pertenece al proyecto actual, recargar tareas
-            if (currentProjectId && data.list_id) {
-                const belongsToCurrentProject = checkIfTaskBelongsToCurrentProject(data.list_id);
-                if (belongsToCurrentProject) {
-                    console.log('[WebSocket] Tarea creada en proyecto actual, recargando...');
-                    cargarTareasProyecto(currentProjectType, currentProjectId);
-                }
-            }
-        }
-
-        function handleTaskUpdated(data) {
-            // Si la tarea está visible, actualizar su fila
-            const taskRow = document.querySelector(`tr[data-task-id="${data.task_id}"]`);
-            if (taskRow && data.task) {
-                updateTaskRow(taskRow, data.task);
-
-                // Si cambió el estado, actualizar tracking de tiempo
-                if (data.status_changed) {
-                    console.log('[WebSocket] Estado cambiado, actualizando time tracking...');
-                    fetchAndUpdateTimeTracking();
-                }
-            }
-        }
-
-        function handleTaskDeleted(data) {
-            // Eliminar la fila de la tarea si está visible
-            const taskRow = document.querySelector(`tr[data-task-id="${data.task_id}"]`);
-            if (taskRow) {
-                taskRow.remove();
-                console.log('[WebSocket] Tarea eliminada de la tabla');
-
-                // Eliminar del tracking de tiempo
-                if (timeTrackingData[data.task_id]) {
-                    delete timeTrackingData[data.task_id];
-                }
-
-                // Recalcular tiempo total
-                calcularTiempoTotal();
-            }
-        }
-
-        function handleProjectCreated(data) {
-            // Recargar proyectos si estamos en el espacio correcto
-            const spaceSelect = document.getElementById('space-select');
-            if (spaceSelect.value === data.space_id) {
-                console.log('[WebSocket] Proyecto creado en espacio actual, recargando...');
-                cargarProyectos(data.space_id);
-            }
-        }
-
-        function handleProjectUpdated(data) {
-            // Actualizar el nombre del proyecto en el selector si está visible
-            const projectSelect = document.getElementById('project-select');
-            const option = projectSelect.querySelector(`option[value="${data.project_type}:${data.project_id}"]`);
-            if (option) {
-                const prefix = data.project_type === 'folder' ? '📁 ' : '📄 ';
-                option.textContent = prefix + data.project_name;
-            }
-        }
-
-        function handleProjectDeleted(data) {
-            // Si es el proyecto actual, limpiar la vista
-            if (currentProjectId === data.project_id && currentProjectType === data.project_type) {
-                console.log('[WebSocket] Proyecto actual eliminado');
-                document.getElementById('table-container').classList.add('hidden');
-                currentProjectId = null;
-                currentProjectType = null;
-            }
-
-            // Recargar lista de proyectos
-            const spaceSelect = document.getElementById('space-select');
-            if (spaceSelect.value === data.space_id) {
-                cargarProyectos(data.space_id);
-            }
-        }
-
-        function handleSpaceCreated(data) {
-            console.log('[WebSocket] Nuevo espacio creado, recargando lista...');
-            cargarSpaces();
-        }
-
-        function handleSpaceUpdated(data) {
-            // Actualizar el nombre del espacio en el selector
-            const spaceSelect = document.getElementById('space-select');
-            const option = spaceSelect.querySelector(`option[value="${data.space_id}"]`);
-            if (option) {
-                option.textContent = data.space_name;
-            }
-        }
-
-        function handleSpaceDeleted(data) {
-            console.log('[WebSocket] Espacio eliminado, recargando lista...');
-            cargarSpaces();
-        }
-
-        // Función auxiliar para verificar si una tarea pertenece al proyecto actual
-        function checkIfTaskBelongsToCurrentProject(list_id) {
-            if (!currentProjectId || !currentProjectType) return false;
-
-            if (currentProjectType === 'list') {
-                return currentProjectId === list_id;
-            } else if (currentProjectType === 'folder') {
-                // Necesitaríamos verificar si la lista pertenece al folder
-                // Por simplicidad, recargamos siempre
-                return true;
-            }
-            return false;
-        }
-
-        // Actualizar una fila de tarea con nuevos datos
-        function updateTaskRow(row, taskData) {
-            // Actualizar estado
-            const estadoCell = row.cells[1];
-            estadoCell.textContent = taskData.estado_texto || taskData.estado;
-            estadoCell.className = '';
-            if (taskData.estado === 'completada') {
-                estadoCell.classList.add('tarea-completada');
-                row.classList.remove('tarea-en-progreso');
-                row.classList.add('tarea-completada');
-            } else if (taskData.estado === 'en_progreso') {
-                estadoCell.classList.add('tarea-en-progreso');
-                row.classList.remove('tarea-completada');
-                row.classList.add('tarea-en-progreso');
-            } else {
-                row.classList.remove('tarea-completada', 'tarea-en-progreso');
-            }
-
-            // Actualizar tiempo trabajado
-            const tiempoCell = row.cells[2];
-            const horas = taskData.horas_trabajadas || 0;
-            const minutos = taskData.minutos_trabajados || 0;
-            tiempoCell.textContent = `${horas}h ${minutos}m`;
-
-            // La celda de tiempo en vivo (columna 3) se actualiza automáticamente por updateAllTimeDisplays()
-
-            // Actualizar fecha de actualización (ahora es la columna 4)
-            const fechaCell = row.cells[4];
-            fechaCell.textContent = taskData.fecha_actualizacion || 'N/A';
-        }
 
         // === Gestión de tiempo en vivo ===
 
@@ -702,40 +474,49 @@
         }
 
         function updateAllTimeDisplays() {
-            let totalSecondsInProgress = 0;
+            let totalSecondsProject = 0;
 
-            // Actualizar cada fila de tarea
-            Object.keys(timeTrackingData).forEach(taskId => {
-                const taskData = timeTrackingData[taskId];
-                if (!taskData.is_currently_in_progress) return;
+            // Recorrer todas las tareas del proyecto actual
+            tareasActuales.forEach(tarea => {
+                // Sumar el tiempo histórico de cada tarea (convertir horas y minutos a segundos)
+                const historicalSeconds = (tarea.horas_trabajadas * 3600) + (tarea.minutos_trabajados * 60);
 
-                const row = document.querySelector(`tr[data-task-id="${taskId}"]`);
-                if (!row) return;
+                // Si la tarea está en progreso, actualizar su celda y agregar tiempo adicional
+                const taskData = timeTrackingData[tarea.id];
+                if (taskData && taskData.is_currently_in_progress) {
+                    const row = document.querySelector(`tr[data-task-id="${tarea.id}"]`);
+                    if (row) {
+                        // Calcular tiempo adicional desde que empezó la sesión actual
+                        let additionalSeconds = 0;
+                        if (taskData.current_session_start) {
+                            const sessionStart = new Date(taskData.current_session_start);
+                            const now = new Date();
+                            additionalSeconds = Math.floor((now - sessionStart) / 1000);
+                        }
 
-                // Calcular tiempo actual
-                let currentSeconds = taskData.total_seconds;
-                if (taskData.current_session_start) {
-                    const sessionStart = new Date(taskData.current_session_start);
-                    const now = new Date();
-                    const sessionSeconds = Math.floor((now - sessionStart) / 1000);
-                    currentSeconds += sessionSeconds;
-                }
+                        const totalTaskSeconds = taskData.total_seconds + additionalSeconds;
 
-                totalSecondsInProgress += currentSeconds;
+                        // Actualizar celda de tiempo en vivo (columna 3)
+                        const timeCell = row.cells[3];
+                        if (timeCell) {
+                            timeCell.textContent = formatSeconds(totalTaskSeconds);
+                            timeCell.style.color = '#667eea';
+                            timeCell.style.fontWeight = 'bold';
+                        }
 
-                // Actualizar celda de tiempo en vivo (columna 3)
-                const timeCell = row.cells[3];
-                if (timeCell) {
-                    timeCell.textContent = formatSeconds(currentSeconds);
-                    timeCell.style.color = '#667eea';
-                    timeCell.style.fontWeight = 'bold';
+                        // Sumar al total del proyecto
+                        totalSecondsProject += totalTaskSeconds;
+                    }
+                } else {
+                    // Para tareas que no están en progreso, solo sumar el tiempo histórico
+                    totalSecondsProject += historicalSeconds;
                 }
             });
 
-            // Actualizar tiempo total en progreso
+            // Actualizar tiempo total del proyecto
             const totalElement = document.getElementById('total-tiempo-en-progreso');
             if (totalElement) {
-                totalElement.textContent = formatSeconds(totalSecondsInProgress);
+                totalElement.textContent = formatSeconds(totalSecondsProject);
             }
         }
 
@@ -845,7 +626,6 @@
             const tableContainer = document.getElementById('table-container');
             const tbody = document.getElementById('lists-tbody');
             const totalTiempoContainer = document.getElementById('total-tiempo-container');
-            const totalTiempoDiv = document.getElementById('total-tiempo');
 
             loading.classList.remove('hidden');
             tableContainer.classList.add('hidden');
@@ -863,9 +643,6 @@
 
                 tbody.innerHTML = '';
                 tareasActuales = data.tasks;
-
-                let totalHoras = 0;
-                let totalMinutos = 0;
 
                 data.tasks.forEach(tarea => {
                     const tr = document.createElement('tr');
@@ -905,18 +682,8 @@
                         </td>
                     `;
                     tbody.appendChild(tr);
-
-                    // Sumar al tiempo total
-                    totalHoras += tarea.horas_trabajadas;
-                    totalMinutos += tarea.minutos_trabajados;
                 });
 
-                // Ajustar minutos si superan 60
-                totalHoras += Math.floor(totalMinutos / 60);
-                totalMinutos = totalMinutos % 60;
-
-                // Mostrar tiempo total
-                totalTiempoDiv.textContent = `${totalHoras}h ${totalMinutos}m`;
                 totalTiempoContainer.classList.remove('hidden');
 
                 loading.classList.add('hidden');
@@ -940,105 +707,6 @@
 
         // Variable global para almacenar las tareas actuales
         let tareasActuales = [];
-
-        // Función para cargar listas de un space
-        async function cargarListas(spaceId) {
-            const loading = document.getElementById('loading');
-            const tableContainer = document.getElementById('table-container');
-            const tbody = document.getElementById('lists-tbody');
-            const totalTiempoContainer = document.getElementById('total-tiempo-container');
-            const totalTiempoDiv = document.getElementById('total-tiempo');
-
-            loading.classList.remove('hidden');
-            tableContainer.classList.add('hidden');
-            ocultarError();
-
-            try {
-                const response = await fetch(`/api/space/${spaceId}/lists`);
-                const data = await response.json();
-
-                if (data.error) {
-                    mostrarError(data.error);
-                    loading.classList.add('hidden');
-                    return;
-                }
-
-                tbody.innerHTML = '';
-                tareasActuales = data.tasks;
-
-                let totalHoras = 0;
-                let totalMinutos = 0;
-
-                data.tasks.forEach(tarea => {
-                    const tr = document.createElement('tr');
-                    tr.setAttribute('data-task-id', tarea.id);
-
-                    // Aplicar clase según el estado y si tiene alerta activa
-                    if (tarea.estado === 'completada') {
-                        tr.className = 'tarea-completada';
-                    } else if (tarea.estado === 'en_progreso') {
-                        tr.className = 'tarea-en-progreso';
-                    }
-
-                    if (tarea.alerta && tarea.alerta.aviso_activado) {
-                        tr.className = (tr.className ? tr.className + ' ' : '') + 'alerta-activa';
-                    }
-
-                    const estadoAlerta = tarea.alerta && tarea.alerta.aviso_activado ?
-                        `Activa (${tarea.alerta.aviso_horas}h ${tarea.alerta.aviso_minutos}m)` :
-                        'Sin configurar';
-
-                    // Formatear el tiempo trabajado
-                    const tiempoTrabajado = `${tarea.horas_trabajadas}h ${tarea.minutos_trabajados}m`;
-
-                    tr.innerHTML = `
-                        <td>
-                            <a href="${tarea.url}" target="_blank" class="tarea-link">${tarea.nombre}</a>
-                        </td>
-                        <td><strong>${tarea.estado_texto}</strong></td>
-                        <td>${tiempoTrabajado}</td>
-                        <td style="color: #999;">--</td>
-                        <td>${tarea.fecha_actualizacion}</td>
-                        <td>
-                            <button class="btn-config" onclick="abrirModalAlerta('${tarea.id}', '${tarea.nombre.replace(/'/g, "\\'")}')">
-                                Configurar
-                            </button>
-                            <br><small>${estadoAlerta}</small>
-                        </td>
-                    `;
-                    tbody.appendChild(tr);
-
-                    // Sumar al tiempo total
-                    totalHoras += tarea.horas_trabajadas;
-                    totalMinutos += tarea.minutos_trabajados;
-                });
-
-                // Ajustar minutos si superan 60
-                totalHoras += Math.floor(totalMinutos / 60);
-                totalMinutos = totalMinutos % 60;
-
-                // Mostrar tiempo total
-                totalTiempoDiv.textContent = `${totalHoras}h ${totalMinutos}m`;
-                totalTiempoContainer.classList.remove('hidden');
-
-                loading.classList.add('hidden');
-                tableContainer.classList.remove('hidden');
-
-                // Guardar espacio actual como proyecto
-                currentProjectId = spaceId;
-                currentProjectType = 'space';
-
-                // Iniciar tracking de tiempo en vivo
-                startTimeTracking();
-
-                // Iniciar verificación periódica de alertas
-                iniciarVerificacionAlertas();
-
-            } catch (error) {
-                mostrarError('Error al cargar las listas: ' + error.message);
-                loading.classList.add('hidden');
-            }
-        }
 
         // Funciones auxiliares
         function mostrarError(mensaje) {
