@@ -69,6 +69,27 @@ def api_health():
         'timestamp': datetime.now().isoformat()
     }), 200
 
+@app.route('/api/endpoints')
+def list_endpoints():
+    """Lista todos los endpoints disponibles para diagnóstico"""
+    endpoints = []
+    for rule in app.url_map.iter_rules():
+        if rule.endpoint != 'static':
+            endpoints.append({
+                'endpoint': rule.rule,
+                'methods': sorted(list(rule.methods - {'HEAD', 'OPTIONS'}))
+            })
+
+    return jsonify({
+        'total_endpoints': len(endpoints),
+        'endpoints': sorted(endpoints, key=lambda x: x['endpoint']),
+        'smtp_endpoints': {
+            'status': '/api/smtp-status (GET)',
+            'test': '/api/test-email (POST)'
+        },
+        'timestamp': datetime.now().isoformat()
+    }), 200
+
 @app.route('/')
 def inicio():
     code = request.args.get('code')
