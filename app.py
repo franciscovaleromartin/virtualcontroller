@@ -1154,6 +1154,82 @@ def calcular_tiempo_en_progreso(tarea_id, estado_actual, headers):
         traceback.print_exc()
         return 0, 0
 
+def get_task_time_in_current_status(task_id, headers):
+    """
+    Obtiene el tiempo que una tarea ha estado en su estado actual usando la API de ClickUp.
+    Retorna el timestamp calculado de cuándo entró al estado actual.
+
+    Returns:
+        tuple: (tiempo_en_segundos, timestamp_inicio_calculado) o (None, None) si falla
+    """
+    try:
+        response = requests.get(
+            f'https://api.clickup.com/api/v2/task/{task_id}/time_in_status',
+            headers=headers,
+            timeout=10
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            print(f"[DEBUG] Time in Status API response para tarea {task_id}: {json.dumps(data, indent=2)}")
+
+            # La estructura de respuesta puede variar, intentar diferentes formatos
+            time_in_current_ms = None
+
+            # Intentar obtener el tiempo del estado actual desde diferentes estructuras posibles
+            # Formato 1: current_status.total_time
+            if 'current_status' in data:
+                current_status = data['current_status']
+                if isinstance(current_status, dict):
+                    total_time = current_status.get('total_time')
+                    if isinstance(total_time, dict):
+                        time_in_current_ms = total_time.get('by_minute') or total_time.get('total')
+                    elif isinstance(total_time, (int, float)):
+                        time_in_current_ms = total_time
+
+            # Formato 2: status_history con el último estado
+            if time_in_current_ms is None and 'status_history' in data:
+                history = data['status_history']
+                if isinstance(history, list) and len(history) > 0:
+                    last_status = history[-1]
+                    if isinstance(last_status, dict):
+                        time_in_current_ms = last_status.get('total_time') or last_status.get('duration')
+
+            # Formato 3: respuesta directa con 'time' o 'duration'
+            if time_in_current_ms is None:
+                time_in_current_ms = data.get('time') or data.get('duration') or data.get('total_time')
+
+            if time_in_current_ms:
+                # Convertir a segundos (asumiendo que viene en milisegundos)
+                time_in_current_seconds = int(time_in_current_ms) / 1000 if time_in_current_ms > 10000 else int(time_in_current_ms)
+
+                # Calcular el timestamp de inicio restando el tiempo del timestamp actual
+                now = datetime.utcnow()
+                start_timestamp = now - timedelta(seconds=time_in_current_seconds)
+                start_timestamp_iso = start_timestamp.isoformat() + 'Z'
+
+                print(f"[INFO] Tarea {task_id}: Tiempo en estado actual desde API: {time_in_current_seconds}s, inicio calculado: {start_timestamp_iso}")
+                return time_in_current_seconds, start_timestamp_iso
+            else:
+                print(f"[WARNING] No se pudo extraer el tiempo del estado actual de la respuesta para tarea {task_id}")
+
+        elif response.status_code == 404:
+            print(f"[WARNING] Time in Status no disponible para tarea {task_id} (puede no estar habilitado o no soportado en el plan)")
+        else:
+            print(f"[WARNING] Error al obtener time in status para tarea {task_id}: {response.status_code}")
+            try:
+                print(f"[DEBUG] Respuesta: {response.text[:500]}")
+            except:
+                pass
+
+    except Exception as e:
+        print(f"[WARNING] No se pudo obtener time in status para tarea {task_id}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+    return None, None
+
+
 def obtener_tareas_de_lista(lista_id, headers):
     """Obtiene todas las tareas de una lista con su estado, fechas de comienzo y término"""
     try:
@@ -1250,13 +1326,22 @@ def obtener_tareas_de_lista(lista_id, headers):
                     print(f"[INFO] Cambio de estado registrado en historial: {tarea['id']}")
                 elif estado == 'en_progreso':
                     # Si la tarea ya estaba en progreso, verificar si tiene historial
-                    # Si no tiene historial de entrada a "en_progreso", crear uno usando date_updated
+                    # Si no tiene historial de entrada a "en_progreso", crear uno usando Time in Status de ClickUp
                     history = db.get_status_history(tarea['id'])
                     has_progress_entry = any(h['new_status'] == 'en_progreso' for h in history)
                     if not has_progress_entry:
-                        # Usar date_updated de la tarea en lugar de timestamp actual
-                        # para que el contador refleje el tiempo real desde el último cambio
-                        changed_at = fecha_actualizacion  # Ya está en formato ISO con 'Z'
+                        # Intentar obtener el tiempo exacto desde la API de ClickUp
+                        time_in_status, calculated_start = get_task_time_in_current_status(tarea['id'], headers)
+
+                        if calculated_start:
+                            # Usar el timestamp calculado desde la API de Time in Status
+                            changed_at = calculated_start
+                            print(f"[INFO] Usando timestamp calculado desde Time in Status API: {changed_at}")
+                        else:
+                            # Fallback: usar date_updated si la API no está disponible
+                            changed_at = fecha_actualizacion
+                            print(f"[INFO] Time in Status API no disponible, usando date_updated como fallback: {changed_at}")
+
                         db.save_status_change(
                             task_id=tarea['id'],
                             old_status=None,
@@ -1265,7 +1350,7 @@ def obtener_tareas_de_lista(lista_id, headers):
                             new_status_text=task_data['status_text'],
                             changed_at=changed_at
                         )
-                        print(f"[INFO] Creado registro inicial para tarea en progreso: {tarea['id']} usando date_updated de ClickUp: {changed_at}")
+                        print(f"[INFO] Creado registro inicial para tarea en progreso: {tarea['id']} con timestamp: {changed_at}")
 
                 # Calcular tiempo en estado "in progress" usando el historial
                 # NOTA: Esto se hace DESPUÉS de registrar el cambio de estado para que el tiempo sea correcto
