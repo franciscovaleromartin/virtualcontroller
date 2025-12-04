@@ -1258,13 +1258,23 @@ def obtener_tareas_de_lista(lista_id, headers):
                 # IMPORTANTE: Registrar cambio de estado ANTES de calcular tiempo
                 # Esto asegura que el historial esté completo cuando se calcula el tiempo
                 if old_status != estado:
-                    # Si la tarea está cambiando A estado "en_progreso" (desde cualquier otro estado),
-                    # usar timestamp actual UTC para que el temporizador comience desde 0
+                    print(f"[INFO] Detectado cambio de estado para tarea {tarea['id']}: '{old_status}' → '{estado}'")
+
+                    # CRITICAL: Usar timestamp actual UTC para cambios de estado
+                    # Esto evita problemas con date_updated que puede ser antiguo o incorrecto
+                    # y asegura que el historial tenga timestamps correctos en orden
                     if estado == 'en_progreso' and old_status != 'en_progreso':
+                        # Tarea entrando a "en_progreso": usar timestamp actual para que timer empiece desde 0
                         changed_at = datetime.utcnow().isoformat() + 'Z'
-                        print(f"[INFO] Tarea cambiando a 'en_progreso', usando timestamp actual UTC: {changed_at}")
+                        print(f"[INFO] Tarea cambiando A 'en_progreso', usando timestamp actual UTC: {changed_at}")
+                    elif old_status == 'en_progreso' and estado != 'en_progreso':
+                        # Tarea saliendo DE "en_progreso": usar timestamp actual para cerrar el período correctamente
+                        changed_at = datetime.utcnow().isoformat() + 'Z'
+                        print(f"[INFO] Tarea cambiando DESDE 'en_progreso' a '{estado}', usando timestamp actual UTC: {changed_at}")
                     else:
+                        # Otros cambios: usar date_updated
                         changed_at = parse_date_flexible(tarea.get('date_updated'))
+                        print(f"[INFO] Usando date_updated para cambio: {changed_at}")
 
                     db.save_status_change(
                         task_id=tarea['id'],
@@ -1274,7 +1284,7 @@ def obtener_tareas_de_lista(lista_id, headers):
                         new_status_text=task_data['status_text'],
                         changed_at=changed_at
                     )
-                    print(f"[INFO] Cambio de estado registrado: {tarea['id']} de '{old_status}' a '{estado}'")
+                    print(f"[INFO] Cambio de estado registrado en historial: {tarea['id']}")
                 elif estado == 'en_progreso':
                     # Si la tarea ya estaba en progreso, verificar si tiene historial
                     # Si no tiene historial de entrada a "en_progreso", crear uno con timestamp actual UTC
