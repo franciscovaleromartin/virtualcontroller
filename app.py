@@ -677,7 +677,13 @@ def process_task_event(event_type, data, webhook_timestamp=None):
     if old_status != estado:
         # Usar el timestamp del webhook si está disponible, sino parse_date_flexible del date_updated
         changed_at_timestamp = None
-        if webhook_timestamp:
+
+        # Si es una tarea nueva (old_status es None) y está en progreso, usar timestamp actual
+        # para que el temporizador comience desde 0
+        if old_status is None and estado == 'en_progreso':
+            changed_at_timestamp = datetime.now().isoformat()
+            print(f"[INFO] Tarea nueva en progreso, usando timestamp actual: {changed_at_timestamp}")
+        elif webhook_timestamp:
             # El timestamp del webhook ya viene en formato ISO
             changed_at_timestamp = parse_date_flexible(webhook_timestamp)
             print(f"[INFO] Usando timestamp del webhook para cambio de estado: {changed_at_timestamp}")
@@ -1235,13 +1241,20 @@ def obtener_tareas_de_lista(lista_id, headers):
 
                 # Si cambió de estado, registrar el cambio en el historial
                 if old_status != estado:
+                    # Si es una tarea nueva (old_task es None) y está en progreso, usar timestamp actual
+                    # para que el temporizador comience desde 0
+                    if old_task is None and estado == 'en_progreso':
+                        changed_at = datetime.now().isoformat()
+                    else:
+                        changed_at = parse_date_flexible(tarea.get('date_updated'))
+
                     db.save_status_change(
                         task_id=tarea['id'],
                         old_status=old_status,
                         new_status=estado,
                         old_status_text=old_task.get('status_text') if old_task else None,
                         new_status_text=task_data['status_text'],
-                        changed_at=parse_date_flexible(tarea.get('date_updated'))
+                        changed_at=changed_at
                     )
                     print(f"[INFO] Cambio de estado registrado: {tarea['id']} de '{old_status}' a '{estado}'")
 

@@ -640,16 +640,10 @@ def calculate_task_time_in_progress(task_id):
         if is_currently_in_progress and in_progress_start:
             current_session_start = in_progress_start.isoformat()
         elif is_currently_in_progress and not in_progress_start:
-            # No hay historial pero está en progreso, buscar la fecha de actualización
-            cursor.execute("SELECT date_updated FROM tasks WHERE id = ?", (task_id,))
-            row = cursor.fetchone()
-            if row:
-                date_updated = dict(row)['date_updated']
-                if date_updated:
-                    try:
-                        current_session_start = datetime.fromisoformat(date_updated).isoformat()
-                    except:
-                        current_session_start = datetime.now().isoformat()
+            # No hay historial pero está en progreso
+            # Usar el momento actual como inicio para que el temporizador comience desde 0
+            # Esto evita que aparezca tiempo acumulado cuando se sincroniza una tarea por primera vez
+            current_session_start = datetime.now().isoformat()
 
         return {
             'total_seconds': total_seconds,
