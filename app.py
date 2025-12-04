@@ -679,10 +679,10 @@ def process_task_event(event_type, data, webhook_timestamp=None):
         changed_at_timestamp = None
 
         # Si la tarea está cambiando A estado "en_progreso" (desde cualquier otro estado),
-        # usar timestamp actual para que el temporizador comience desde 0
+        # usar timestamp actual UTC para que el temporizador comience desde 0
         if estado == 'en_progreso' and old_status != 'en_progreso':
-            changed_at_timestamp = datetime.now().isoformat()
-            print(f"[INFO] Tarea cambiando a 'en_progreso', usando timestamp actual: {changed_at_timestamp}")
+            changed_at_timestamp = datetime.utcnow().isoformat() + 'Z'
+            print(f"[INFO] Tarea cambiando a 'en_progreso', usando timestamp actual UTC: {changed_at_timestamp}")
         elif webhook_timestamp:
             # El timestamp del webhook ya viene en formato ISO
             changed_at_timestamp = parse_date_flexible(webhook_timestamp)
@@ -702,11 +702,11 @@ def process_task_event(event_type, data, webhook_timestamp=None):
         print(f"[INFO] Cambio de estado registrado: {task_id} de '{old_status}' a '{estado}' en {changed_at_timestamp}")
     elif estado == 'en_progreso':
         # Si la tarea ya estaba en progreso, verificar si tiene historial
-        # Si no tiene historial de entrada a "en_progreso", crear uno con timestamp actual
+        # Si no tiene historial de entrada a "en_progreso", crear uno con timestamp actual UTC
         history = db.get_status_history(task_id)
         has_progress_entry = any(h['new_status'] == 'en_progreso' for h in history)
         if not has_progress_entry:
-            changed_at_timestamp = datetime.now().isoformat()
+            changed_at_timestamp = datetime.utcnow().isoformat() + 'Z'
             db.save_status_change(
                 task_id=task_id,
                 old_status=None,
@@ -715,7 +715,7 @@ def process_task_event(event_type, data, webhook_timestamp=None):
                 new_status_text=data.get('status', 'Sin estado'),
                 changed_at=changed_at_timestamp
             )
-            print(f"[INFO] Creado registro inicial para tarea en progreso: {task_id} con timestamp actual: {changed_at_timestamp}")
+            print(f"[INFO] Creado registro inicial para tarea en progreso: {task_id} con timestamp actual UTC: {changed_at_timestamp}")
 
     # Guardar en caché para acceso rápido
     tareas_cache[task_id] = {
@@ -1258,10 +1258,10 @@ def obtener_tareas_de_lista(lista_id, headers):
                 # Si cambió de estado, registrar el cambio en el historial
                 if old_status != estado:
                     # Si la tarea está cambiando A estado "en_progreso" (desde cualquier otro estado),
-                    # usar timestamp actual para que el temporizador comience desde 0
+                    # usar timestamp actual UTC para que el temporizador comience desde 0
                     if estado == 'en_progreso' and old_status != 'en_progreso':
-                        changed_at = datetime.now().isoformat()
-                        print(f"[INFO] Tarea cambiando a 'en_progreso', usando timestamp actual: {changed_at}")
+                        changed_at = datetime.utcnow().isoformat() + 'Z'
+                        print(f"[INFO] Tarea cambiando a 'en_progreso', usando timestamp actual UTC: {changed_at}")
                     else:
                         changed_at = parse_date_flexible(tarea.get('date_updated'))
 
@@ -1276,11 +1276,11 @@ def obtener_tareas_de_lista(lista_id, headers):
                     print(f"[INFO] Cambio de estado registrado: {tarea['id']} de '{old_status}' a '{estado}'")
                 elif estado == 'en_progreso':
                     # Si la tarea ya estaba en progreso, verificar si tiene historial
-                    # Si no tiene historial de entrada a "en_progreso", crear uno con timestamp actual
+                    # Si no tiene historial de entrada a "en_progreso", crear uno con timestamp actual UTC
                     history = db.get_status_history(tarea['id'])
                     has_progress_entry = any(h['new_status'] == 'en_progreso' for h in history)
                     if not has_progress_entry:
-                        changed_at = datetime.now().isoformat()
+                        changed_at = datetime.utcnow().isoformat() + 'Z'
                         db.save_status_change(
                             task_id=tarea['id'],
                             old_status=None,
@@ -1289,7 +1289,7 @@ def obtener_tareas_de_lista(lista_id, headers):
                             new_status_text=task_data['status_text'],
                             changed_at=changed_at
                         )
-                        print(f"[INFO] Creado registro inicial para tarea en progreso: {tarea['id']} con timestamp actual: {changed_at}")
+                        print(f"[INFO] Creado registro inicial para tarea en progreso: {tarea['id']} con timestamp actual UTC: {changed_at}")
 
                 # Calcular tiempo en estado "in progress" usando el historial
                 print(f"[INFO] Calculando tiempo para tarea: {tarea['name']} (ID: {tarea['id']})")
@@ -1666,10 +1666,20 @@ def get_task_status_history_api(task_id):
     """
     try:
         history = db.get_status_history(task_id)
+        task = db.get_task(task_id)
+        time_data = db.calculate_task_time_in_progress(task_id)
+
         return jsonify({
             'success': True,
             'task_id': task_id,
-            'history': history
+            'task_name': task['name'] if task else 'Unknown',
+            'current_status': task['status'] if task else 'Unknown',
+            'history': history,
+            'time_calculation': {
+                'total_seconds': time_data['total_seconds'],
+                'current_session_start': time_data['current_session_start'],
+                'is_currently_in_progress': time_data['is_currently_in_progress']
+            }
         })
 
     except Exception as e:
