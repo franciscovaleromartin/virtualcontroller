@@ -1666,10 +1666,20 @@ def get_task_status_history_api(task_id):
     """
     try:
         history = db.get_status_history(task_id)
+        task = db.get_task(task_id)
+        time_data = db.calculate_task_time_in_progress(task_id)
+
         return jsonify({
             'success': True,
             'task_id': task_id,
-            'history': history
+            'task_name': task['name'] if task else 'Unknown',
+            'current_status': task['status'] if task else 'Unknown',
+            'history': history,
+            'time_calculation': {
+                'total_seconds': time_data['total_seconds'],
+                'current_session_start': time_data['current_session_start'],
+                'is_currently_in_progress': time_data['is_currently_in_progress']
+            }
         })
 
     except Exception as e:
