@@ -617,6 +617,12 @@ def calculate_task_time_in_progress(task_id):
 
         history = [dict(row) for row in cursor.fetchall()]
 
+        # Debug: Imprimir historial completo
+        print(f"[DEBUG] Historial completo para tarea {task_id}:")
+        for i, h in enumerate(history):
+            print(f"  [{i}] new_status={h['new_status']}, changed_at={h['changed_at']}")
+        print(f"[DEBUG] Estado actual de la tarea: {current_status}")
+
         total_seconds = 0
         current_session_start = None
         in_progress_start = None
@@ -640,10 +646,12 @@ def calculate_task_time_in_progress(task_id):
             if status == 'en_progreso':
                 # Inicio de un periodo en progreso
                 in_progress_start = timestamp
+                print(f"[DEBUG]   → Inicio período en progreso: {timestamp}")
             elif in_progress_start:
                 # Fin de un periodo en progreso
                 try:
                     duration = (timestamp - in_progress_start).total_seconds()
+                    print(f"[DEBUG]   → Fin período: {timestamp}, duración: {duration}s ({duration/3600:.2f}h)")
                     total_seconds += duration
                     in_progress_start = None
                 except Exception as e:
@@ -659,6 +667,11 @@ def calculate_task_time_in_progress(task_id):
             # Usar el momento actual UTC como inicio para que el temporizador comience desde 0
             # Esto evita que aparezca tiempo acumulado cuando se sincroniza una tarea por primera vez
             current_session_start = datetime.utcnow().isoformat() + 'Z'
+
+        print(f"[DEBUG] Resultado final para tarea {task_id}:")
+        print(f"  total_seconds: {total_seconds} ({total_seconds/3600:.2f}h)")
+        print(f"  is_currently_in_progress: {is_currently_in_progress}")
+        print(f"  current_session_start: {current_session_start}")
 
         return {
             'total_seconds': total_seconds,
