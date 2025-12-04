@@ -678,11 +678,11 @@ def process_task_event(event_type, data, webhook_timestamp=None):
         # Usar el timestamp del webhook si está disponible, sino parse_date_flexible del date_updated
         changed_at_timestamp = None
 
-        # Si es una tarea nueva (old_status es None) y está en progreso, usar timestamp actual
-        # para que el temporizador comience desde 0
-        if old_status is None and estado == 'en_progreso':
+        # Si la tarea está cambiando A estado "en_progreso" (desde cualquier otro estado),
+        # usar timestamp actual para que el temporizador comience desde 0
+        if estado == 'en_progreso' and old_status != 'en_progreso':
             changed_at_timestamp = datetime.now().isoformat()
-            print(f"[INFO] Tarea nueva en progreso, usando timestamp actual: {changed_at_timestamp}")
+            print(f"[INFO] Tarea cambiando a 'en_progreso', usando timestamp actual: {changed_at_timestamp}")
         elif webhook_timestamp:
             # El timestamp del webhook ya viene en formato ISO
             changed_at_timestamp = parse_date_flexible(webhook_timestamp)
@@ -1241,10 +1241,11 @@ def obtener_tareas_de_lista(lista_id, headers):
 
                 # Si cambió de estado, registrar el cambio en el historial
                 if old_status != estado:
-                    # Si es una tarea nueva (old_task es None) y está en progreso, usar timestamp actual
-                    # para que el temporizador comience desde 0
-                    if old_task is None and estado == 'en_progreso':
+                    # Si la tarea está cambiando A estado "en_progreso" (desde cualquier otro estado),
+                    # usar timestamp actual para que el temporizador comience desde 0
+                    if estado == 'en_progreso' and old_status != 'en_progreso':
                         changed_at = datetime.now().isoformat()
+                        print(f"[INFO] Tarea cambiando a 'en_progreso', usando timestamp actual: {changed_at}")
                     else:
                         changed_at = parse_date_flexible(tarea.get('date_updated'))
 
