@@ -308,20 +308,22 @@ def parse_date_flexible(date_value):
 
 def parse_date_to_display(date_value):
     """
-    Convierte una fecha en múltiples formatos a formato display (YYYY-MM-DD HH:MM:SS)
+    Convierte una fecha en múltiples formatos a formato ISO con timezone UTC.
+    El frontend convertirá este timestamp a la hora local del usuario.
 
     Returns:
-        String en formato display o datetime.now() si hay error
+        String en formato ISO con 'Z' (UTC) o timestamp actual si hay error
     """
     iso_date = parse_date_flexible(date_value)
     if iso_date:
-        try:
-            dt = datetime.fromisoformat(iso_date.replace('Z', '+00:00'))
-            return dt.strftime('%Y-%m-%d %H:%M:%S')
-        except:
-            pass
+        # Si ya tiene 'Z' o '+', retornarlo tal cual
+        if iso_date.endswith('Z') or '+' in iso_date or '-' in iso_date[-6:]:
+            return iso_date
+        # Si no, asumir UTC y añadir 'Z'
+        return iso_date + 'Z'
 
-    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    # Si hay error, retornar timestamp actual en UTC
+    return datetime.utcnow().isoformat() + 'Z'
 
 
 
@@ -1222,8 +1224,9 @@ def obtener_tareas_de_lista(lista_id, headers):
                 elif 'progress' in status_type or 'review' in status_type or 'doing' in status_type:
                     estado = 'en_progreso'
 
-                # Fecha de última actualización
-                fecha_actualizacion = datetime.fromtimestamp(int(tarea['date_updated']) / 1000).strftime('%Y-%m-%d %H:%M:%S')
+                # Fecha de última actualización (enviar como ISO con timezone para conversión en cliente)
+                fecha_actualizacion_dt = datetime.utcfromtimestamp(int(tarea['date_updated']) / 1000)
+                fecha_actualizacion = fecha_actualizacion_dt.isoformat() + 'Z'
 
                 # Guardar tarea en la base de datos PRIMERO (necesario para calcular tiempo)
                 task_data = {
