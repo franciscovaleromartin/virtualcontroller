@@ -1299,17 +1299,24 @@ def obtener_tareas_de_lista(lista_id, headers):
                 if old_status != estado:
                     print(f"[INFO] Detectado cambio de estado para tarea {tarea['id']}: '{old_status}' → '{estado}'")
 
-                    # CRITICAL: Usar timestamp actual UTC para cambios de estado
-                    # Esto evita problemas con date_updated que puede ser antiguo o incorrecto
-                    # y asegura que el historial tenga timestamps correctos en orden
+                    # Determinar el timestamp correcto del cambio
                     if estado == 'en_progreso' and old_status != 'en_progreso':
-                        # Tarea entrando a "en_progreso": usar timestamp actual para que timer empiece desde 0
-                        changed_at = datetime.utcnow().isoformat() + 'Z'
-                        print(f"[INFO] Tarea cambiando A 'en_progreso', usando timestamp actual UTC: {changed_at}")
+                        # Tarea entrando a "en_progreso": intentar obtener el tiempo real desde ClickUp
+                        time_in_status, calculated_start = get_task_time_in_current_status(tarea['id'], headers)
+
+                        if calculated_start:
+                            # Usar el timestamp calculado desde la API de Time in Status
+                            changed_at = calculated_start
+                            print(f"[INFO] Tarea cambiando A 'en_progreso', usando timestamp desde Time in Status API: {changed_at}")
+                        else:
+                            # Fallback: usar date_updated como aproximación
+                            changed_at = fecha_actualizacion
+                            print(f"[INFO] Tarea cambiando A 'en_progreso', Time in Status no disponible, usando date_updated: {changed_at}")
+
                     elif old_status == 'en_progreso' and estado != 'en_progreso':
-                        # Tarea saliendo DE "en_progreso": usar timestamp actual para cerrar el período correctamente
-                        changed_at = datetime.utcnow().isoformat() + 'Z'
-                        print(f"[INFO] Tarea cambiando DESDE 'en_progreso' a '{estado}', usando timestamp actual UTC: {changed_at}")
+                        # Tarea saliendo DE "en_progreso": usar date_updated
+                        changed_at = fecha_actualizacion
+                        print(f"[INFO] Tarea cambiando DESDE 'en_progreso' a '{estado}', usando date_updated: {changed_at}")
                     else:
                         # Otros cambios: usar date_updated
                         changed_at = parse_date_flexible(tarea.get('date_updated'))
