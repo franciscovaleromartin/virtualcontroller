@@ -968,55 +968,15 @@ def get_spaces():
 
 @app.route('/api/space/<space_id>/projects')
 def get_projects(space_id):
-    """Obtiene todas las carpetas y listas de un espacio desde la base de datos"""
+    """Obtiene todas las carpetas y listas de un espacio, siempre sincronizando desde la API de ClickUp"""
     try:
         headers = get_headers()
         if not headers:
             return jsonify({'error': 'No autenticado', 'redirect': '/login'}), 401
 
-        proyectos = []
-
-        # Obtener folders de la base de datos
-        folders = db.get_folders_by_space(space_id)
-
-        for folder in folders:
-            # Añadir el folder como proyecto
-            proyectos.append({
-                'id': f'folder_{folder["id"]}',
-                'name': f'📁 {folder["name"]}',
-                'type': 'folder',
-                'folder_id': folder['id']
-            })
-
-            # Obtener las listas dentro de cada folder desde la BD
-            folder_lists = db.get_lists_by_folder(folder['id'])
-            for lista in folder_lists:
-                if not lista.get('archived'):
-                    proyectos.append({
-                        'id': f'list_{lista["id"]}',
-                        'name': f'  📄 {lista["name"]}',
-                        'type': 'list',
-                        'list_id': lista['id']
-                    })
-
-        # Obtener listas sin folder (directamente en el space) desde la BD
-        space_lists = db.get_lists_by_space(space_id)
-        for lista in space_lists:
-            # Solo incluir listas que no tienen folder_id
-            if not lista.get('folder_id') and not lista.get('archived'):
-                proyectos.append({
-                    'id': f'list_{lista["id"]}',
-                    'name': f'📄 {lista["name"]}',
-                    'type': 'list',
-                    'list_id': lista['id']
-                })
-
-        # Si no hay proyectos en la BD, sincronizar desde la API
-        if not proyectos:
-            print(f"[INFO] No hay proyectos en BD para space {space_id}, sincronizando desde API...")
-            return sync_projects_from_api(space_id, headers)
-
-        return jsonify({'projects': proyectos})
+        # Siempre sincronizar desde la API para obtener datos actualizados
+        print(f"[INFO] Sincronizando proyectos desde API para space {space_id}...")
+        return sync_projects_from_api(space_id, headers)
 
     except Exception as e:
         print(f"[ERROR] Error al obtener proyectos: {str(e)}")
