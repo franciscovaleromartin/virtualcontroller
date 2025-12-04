@@ -700,6 +700,22 @@ def process_task_event(event_type, data, webhook_timestamp=None):
             changed_at=changed_at_timestamp
         )
         print(f"[INFO] Cambio de estado registrado: {task_id} de '{old_status}' a '{estado}' en {changed_at_timestamp}")
+    elif estado == 'en_progreso':
+        # Si la tarea ya estaba en progreso, verificar si tiene historial
+        # Si no tiene historial de entrada a "en_progreso", crear uno con timestamp actual
+        history = db.get_status_history(task_id)
+        has_progress_entry = any(h['new_status'] == 'en_progreso' for h in history)
+        if not has_progress_entry:
+            changed_at_timestamp = datetime.now().isoformat()
+            db.save_status_change(
+                task_id=task_id,
+                old_status=None,
+                new_status=estado,
+                old_status_text=None,
+                new_status_text=data.get('status', 'Sin estado'),
+                changed_at=changed_at_timestamp
+            )
+            print(f"[INFO] Creado registro inicial para tarea en progreso: {task_id} con timestamp actual: {changed_at_timestamp}")
 
     # Guardar en caché para acceso rápido
     tareas_cache[task_id] = {
@@ -1258,6 +1274,22 @@ def obtener_tareas_de_lista(lista_id, headers):
                         changed_at=changed_at
                     )
                     print(f"[INFO] Cambio de estado registrado: {tarea['id']} de '{old_status}' a '{estado}'")
+                elif estado == 'en_progreso':
+                    # Si la tarea ya estaba en progreso, verificar si tiene historial
+                    # Si no tiene historial de entrada a "en_progreso", crear uno con timestamp actual
+                    history = db.get_status_history(tarea['id'])
+                    has_progress_entry = any(h['new_status'] == 'en_progreso' for h in history)
+                    if not has_progress_entry:
+                        changed_at = datetime.now().isoformat()
+                        db.save_status_change(
+                            task_id=tarea['id'],
+                            old_status=None,
+                            new_status=estado,
+                            old_status_text=None,
+                            new_status_text=task_data['status_text'],
+                            changed_at=changed_at
+                        )
+                        print(f"[INFO] Creado registro inicial para tarea en progreso: {tarea['id']} con timestamp actual: {changed_at}")
 
                 # Calcular tiempo en estado "in progress" usando el historial
                 print(f"[INFO] Calculando tiempo para tarea: {tarea['name']} (ID: {tarea['id']})")
