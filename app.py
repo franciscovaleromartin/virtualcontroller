@@ -25,6 +25,20 @@ print(f"[STARTUP] Variables de entorno cargadas", flush=True)
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
+# Configurar logging para silenciar health checks
+import logging
+from werkzeug.serving import WSGIRequestHandler
+
+class HealthCheckFilter(logging.Filter):
+    """Filtro para silenciar logs de health checks"""
+    def filter(self, record):
+        # Filtrar requests a /health, /healthz, /api/health
+        return not any(path in record.getMessage() for path in ['/health', '/healthz'])
+
+# Aplicar filtro al logger de werkzeug (servidor de desarrollo de Flask)
+log = logging.getLogger('werkzeug')
+log.addFilter(HealthCheckFilter())
+
 print(f"[STARTUP] Flask app creada", flush=True)
 
 CLICKUP_CLIENT_ID = os.getenv('CLICKUP_CLIENT_ID')
@@ -57,6 +71,14 @@ def health():
     return jsonify({
         'status': 'ok',
         'timestamp': datetime.now().isoformat(),
+        'service': 'virtualcontroller'
+    }), 200
+
+@app.route('/healthz')
+def healthz():
+    """Kubernetes-style health check endpoint"""
+    return jsonify({
+        'status': 'ok',
         'service': 'virtualcontroller'
     }), 200
 
