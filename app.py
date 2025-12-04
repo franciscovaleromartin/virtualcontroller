@@ -1255,7 +1255,8 @@ def obtener_tareas_de_lista(lista_id, headers):
                 db.save_task(task_data)
                 print(f"[INFO] Tarea {tarea['id']} guardada en BD: {tarea['name']}")
 
-                # Si cambió de estado, registrar el cambio en el historial
+                # IMPORTANTE: Registrar cambio de estado ANTES de calcular tiempo
+                # Esto asegura que el historial esté completo cuando se calcula el tiempo
                 if old_status != estado:
                     # Si la tarea está cambiando A estado "en_progreso" (desde cualquier otro estado),
                     # usar timestamp actual UTC para que el temporizador comience desde 0
@@ -1292,6 +1293,7 @@ def obtener_tareas_de_lista(lista_id, headers):
                         print(f"[INFO] Creado registro inicial para tarea en progreso: {tarea['id']} con timestamp actual UTC: {changed_at}")
 
                 # Calcular tiempo en estado "in progress" usando el historial
+                # NOTA: Esto se hace DESPUÉS de registrar el cambio de estado para que el tiempo sea correcto
                 print(f"[INFO] Calculando tiempo para tarea: {tarea['name']} (ID: {tarea['id']})")
 
                 # Obtener información completa del tiempo en progreso
