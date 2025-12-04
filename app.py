@@ -1295,16 +1295,29 @@ def obtener_tareas_de_lista(lista_id, headers):
                 print(f"[INFO] Calculando tiempo para tarea: {tarea['name']} (ID: {tarea['id']})")
 
                 # Obtener información completa del tiempo en progreso
-                time_data = db.calculate_task_time_in_progress(tarea['id'])
-                tiempo_total_segundos = time_data['total_seconds']
-                sesion_actual_inicio = time_data['current_session_start']
-                actualmente_en_progreso = time_data['is_currently_in_progress']
+                try:
+                    time_data = db.calculate_task_time_in_progress(tarea['id'])
+                    tiempo_total_segundos = time_data['total_seconds']
+                    sesion_actual_inicio = time_data['current_session_start']
+                    actualmente_en_progreso = time_data['is_currently_in_progress']
 
-                # Calcular horas y minutos para compatibilidad
-                horas_trabajadas = int(tiempo_total_segundos // 3600)
-                minutos_trabajados = int((tiempo_total_segundos % 3600) // 60)
+                    # Calcular horas y minutos para compatibilidad
+                    horas_trabajadas = int(tiempo_total_segundos // 3600)
+                    minutos_trabajados = int((tiempo_total_segundos % 3600) // 60)
 
-                print(f"[INFO] Tiempo calculado para tarea {tarea['id']}: {horas_trabajadas}h {minutos_trabajados}m (total: {tiempo_total_segundos}s, en progreso: {actualmente_en_progreso})")
+                    print(f"[INFO] Tiempo calculado para tarea {tarea['id']}: {horas_trabajadas}h {minutos_trabajados}m (total: {tiempo_total_segundos}s, en progreso: {actualmente_en_progreso})")
+                except Exception as e:
+                    # Si hay error al calcular tiempo, usar valores por defecto para no bloquear el listado de tareas
+                    print(f"[ERROR] Error al calcular tiempo para tarea {tarea['id']}: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+                    # Valores por defecto
+                    tiempo_total_segundos = 0
+                    sesion_actual_inicio = None
+                    actualmente_en_progreso = False
+                    horas_trabajadas = 0
+                    minutos_trabajados = 0
+                    print(f"[WARNING] Usando valores por defecto para tarea {tarea['id']} para evitar bloqueo del listado")
 
                 # Obtener configuración de alerta para esta tarea desde el diccionario en memoria
                 alerta_config = alertas_tareas.get(tarea['id'], {
