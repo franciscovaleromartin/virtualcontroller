@@ -1480,14 +1480,30 @@ def obtener_alerta_tarea_endpoint(tarea_id):
 def enviar_email_alerta(email_destino, tarea_nombre, proyecto_nombre, tarea_url, tiempo_en_progreso):
     """Envía un email de alerta cuando una tarea supera su tiempo máximo en progreso"""
     try:
+        print(f"\n[EMAIL] ===== Iniciando envío de email de alerta =====")
+        print(f"[EMAIL] Destino: {email_destino}")
+        print(f"[EMAIL] Tarea: {tarea_nombre}")
+        print(f"[EMAIL] Proyecto: {proyecto_nombre}")
+
+        # Verificar configuración SMTP
         if not SMTP_EMAIL or not SMTP_PASSWORD:
-            print("[WARNING] Configuración de email no disponible. No se puede enviar email.")
+            print("[EMAIL] ❌ ERROR: Configuración de email no disponible")
+            print(f"[EMAIL]    SMTP_SERVER: {SMTP_SERVER}")
+            print(f"[EMAIL]    SMTP_PORT: {SMTP_PORT}")
+            print(f"[EMAIL]    SMTP_EMAIL: {'configurado' if SMTP_EMAIL else 'NO CONFIGURADO'}")
+            print(f"[EMAIL]    SMTP_PASSWORD: {'configurado' if SMTP_PASSWORD else 'NO CONFIGURADO'}")
             return False
+
+        print(f"[EMAIL] ✓ Configuración SMTP disponible")
+        print(f"[EMAIL]    Servidor: {SMTP_SERVER}:{SMTP_PORT}")
+        print(f"[EMAIL]    De: {SMTP_EMAIL}")
 
         msg = MIMEMultipart('alternative')
         msg['Subject'] = f'⚠️ Alerta: Demora en tarea "{tarea_nombre}" - {proyecto_nombre}'
         msg['From'] = SMTP_EMAIL
         msg['To'] = email_destino
+
+        print(f"[EMAIL] ✓ Mensaje creado")
 
         # Crear el cuerpo del email en HTML
         html = f"""
@@ -1554,17 +1570,56 @@ reactiva la configuración desde el panel de control.
         msg.attach(part1)
         msg.attach(part2)
 
-        # Enviar el email usando SMTP de Brevo
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_EMAIL, SMTP_PASSWORD)
-            server.send_message(msg)
+        print(f"[EMAIL] ✓ Contenido del mensaje adjuntado (HTML + texto plano)")
 
-        print(f"[INFO] Email de alerta de demora enviado a {email_destino} para tarea '{tarea_nombre}' del proyecto '{proyecto_nombre}'")
+        # Enviar el email usando SMTP de Brevo
+        print(f"[EMAIL] Conectando al servidor SMTP...")
+        with smtplib.SMTP(SMTP_SERVER, int(SMTP_PORT), timeout=30) as server:
+            print(f"[EMAIL] ✓ Conexión establecida")
+
+            print(f"[EMAIL] Iniciando STARTTLS...")
+            server.starttls()
+            print(f"[EMAIL] ✓ STARTTLS iniciado")
+
+            print(f"[EMAIL] Autenticando...")
+            server.login(SMTP_EMAIL, SMTP_PASSWORD)
+            print(f"[EMAIL] ✓ Autenticación exitosa")
+
+            print(f"[EMAIL] Enviando mensaje...")
+            server.send_message(msg)
+            print(f"[EMAIL] ✓ Mensaje enviado exitosamente")
+
+        print(f"[EMAIL] ===== Email enviado a {email_destino} =====")
+        print(f"[INFO] ✅ Email de alerta enviado para tarea '{tarea_nombre}' del proyecto '{proyecto_nombre}'")
         return True
 
+    except smtplib.SMTPAuthenticationError as e:
+        print(f"[EMAIL] ❌ ERROR DE AUTENTICACIÓN SMTP:")
+        print(f"[EMAIL]    {str(e)}")
+        print(f"[EMAIL]    Verifica las credenciales SMTP_EMAIL y SMTP_PASSWORD en Render")
+        import traceback
+        traceback.print_exc()
+        return False
+
+    except smtplib.SMTPConnectError as e:
+        print(f"[EMAIL] ❌ ERROR DE CONEXIÓN SMTP:")
+        print(f"[EMAIL]    {str(e)}")
+        print(f"[EMAIL]    Verifica que el servidor {SMTP_SERVER}:{SMTP_PORT} sea accesible")
+        import traceback
+        traceback.print_exc()
+        return False
+
+    except smtplib.SMTPException as e:
+        print(f"[EMAIL] ❌ ERROR SMTP:")
+        print(f"[EMAIL]    {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return False
+
     except Exception as e:
-        print(f"[ERROR] Error al enviar email de alerta: {str(e)}")
+        print(f"[EMAIL] ❌ ERROR INESPERADO al enviar email:")
+        print(f"[EMAIL]    Tipo: {type(e).__name__}")
+        print(f"[EMAIL]    Mensaje: {str(e)}")
         import traceback
         traceback.print_exc()
         return False
@@ -1694,6 +1749,93 @@ def verificar_alertas():
         print(f"[ERROR] Error crítico en verificación de alertas: {str(e)}")
         import traceback
         traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/test-email', methods=['POST'])
+def test_email():
+    """Endpoint para probar el envío de emails de alerta"""
+    try:
+        data = request.json
+        email_destino = data.get('email')
+
+        if not email_destino:
+            return jsonify({'error': 'Se requiere un email de destino'}), 400
+
+        print(f"[INFO] Probando envío de email a: {email_destino}")
+
+        # Verificar configuración SMTP
+        if not SMTP_EMAIL or not SMTP_PASSWORD:
+            return jsonify({
+                'error': 'Configuración SMTP no disponible',
+                'details': {
+                    'SMTP_SERVER': SMTP_SERVER,
+                    'SMTP_PORT': SMTP_PORT,
+                    'SMTP_EMAIL': 'configurado' if SMTP_EMAIL else 'NO CONFIGURADO',
+                    'SMTP_PASSWORD': 'configurado' if SMTP_PASSWORD else 'NO CONFIGURADO'
+                }
+            }), 500
+
+        # Intentar enviar email de prueba
+        resultado = enviar_email_alerta(
+            email_destino=email_destino,
+            tarea_nombre="Tarea de Prueba del Sistema",
+            proyecto_nombre="Proyecto de Prueba",
+            tarea_url="https://app.clickup.com/t/test123",
+            tiempo_en_progreso="2 horas y 30 minutos"
+        )
+
+        if resultado:
+            return jsonify({
+                'success': True,
+                'message': f'Email de prueba enviado exitosamente a {email_destino}',
+                'smtp_config': {
+                    'server': SMTP_SERVER,
+                    'port': SMTP_PORT,
+                    'email': SMTP_EMAIL
+                }
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'No se pudo enviar el email. Revisa los logs del servidor.'
+            }), 500
+
+    except Exception as e:
+        print(f"[ERROR] Error en test de email: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/smtp-status', methods=['GET'])
+def smtp_status():
+    """Verifica el estado de la configuración SMTP"""
+    try:
+        status = {
+            'smtp_server': SMTP_SERVER,
+            'smtp_port': SMTP_PORT,
+            'smtp_email': SMTP_EMAIL if SMTP_EMAIL else None,
+            'smtp_password_configured': bool(SMTP_PASSWORD),
+            'all_configured': all([SMTP_SERVER, SMTP_PORT, SMTP_EMAIL, SMTP_PASSWORD])
+        }
+
+        # Intentar conexión de prueba
+        if status['all_configured']:
+            try:
+                import socket
+                sock = socket.create_connection((SMTP_SERVER, int(SMTP_PORT)), timeout=5)
+                sock.close()
+                status['connection_test'] = 'SUCCESS'
+            except Exception as e:
+                status['connection_test'] = f'FAILED: {str(e)}'
+        else:
+            status['connection_test'] = 'SKIPPED - Configuración incompleta'
+
+        return jsonify(status)
+
+    except Exception as e:
+        print(f"[ERROR] Error al verificar estado SMTP: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
