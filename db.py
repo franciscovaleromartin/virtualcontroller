@@ -663,10 +663,11 @@ def calculate_task_time_in_progress(task_id):
         if is_currently_in_progress and in_progress_start:
             current_session_start = in_progress_start.isoformat()
         elif is_currently_in_progress and not in_progress_start:
-            # No hay historial pero está en progreso
-            # Usar el momento actual UTC como inicio para que el temporizador comience desde 0
-            # Esto evita que aparezca tiempo acumulado cuando se sincroniza una tarea por primera vez
-            current_session_start = datetime.utcnow().isoformat() + 'Z'
+            # No hay historial de inicio, lo cual significa que no sabemos cuándo empezó
+            # NO usar datetime.utcnow() porque haría que el contador se reinicie en cada cálculo
+            # Dejar como None para que el sistema de sincronización lo inicialice correctamente
+            current_session_start = None
+            print(f"[WARNING] Tarea {task_id} está en progreso pero no tiene historial de inicio")
 
         print(f"[DEBUG] Resultado final para tarea {task_id}:")
         print(f"  total_seconds: {total_seconds} ({total_seconds/3600:.2f}h)")
