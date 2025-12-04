@@ -1250,11 +1250,13 @@ def obtener_tareas_de_lista(lista_id, headers):
                     print(f"[INFO] Cambio de estado registrado en historial: {tarea['id']}")
                 elif estado == 'en_progreso':
                     # Si la tarea ya estaba en progreso, verificar si tiene historial
-                    # Si no tiene historial de entrada a "en_progreso", crear uno con timestamp actual UTC
+                    # Si no tiene historial de entrada a "en_progreso", crear uno usando date_updated
                     history = db.get_status_history(tarea['id'])
                     has_progress_entry = any(h['new_status'] == 'en_progreso' for h in history)
                     if not has_progress_entry:
-                        changed_at = datetime.utcnow().isoformat() + 'Z'
+                        # Usar date_updated de la tarea en lugar de timestamp actual
+                        # para que el contador refleje el tiempo real desde el último cambio
+                        changed_at = fecha_actualizacion  # Ya está en formato ISO con 'Z'
                         db.save_status_change(
                             task_id=tarea['id'],
                             old_status=None,
@@ -1263,7 +1265,7 @@ def obtener_tareas_de_lista(lista_id, headers):
                             new_status_text=task_data['status_text'],
                             changed_at=changed_at
                         )
-                        print(f"[INFO] Creado registro inicial para tarea en progreso: {tarea['id']} con timestamp actual UTC: {changed_at}")
+                        print(f"[INFO] Creado registro inicial para tarea en progreso: {tarea['id']} usando date_updated de ClickUp: {changed_at}")
 
                 # Calcular tiempo en estado "in progress" usando el historial
                 # NOTA: Esto se hace DESPUÉS de registrar el cambio de estado para que el tiempo sea correcto
