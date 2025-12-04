@@ -19,9 +19,9 @@ workers = min(multiprocessing.cpu_count() * 2 + 1, 4)
 worker_class = 'gthread'
 threads = 2
 
-# Timeout para requests HTTP
-timeout = 120
-graceful_timeout = 30
+# Timeout para requests HTTP (aumentado para deploy)
+timeout = 300
+graceful_timeout = 60
 
 # Keep alive timeout
 keepalive = 5
@@ -36,8 +36,8 @@ loglevel = 'info'
 capture_output = True
 enable_stdio_inheritance = True
 
-# Preload app para mejor rendimiento
-preload_app = True
+# Preload app desactivado para evitar timeouts en deploy
+preload_app = False
 
 # Max requests before worker restart
 max_requests = 1000
