@@ -624,16 +624,31 @@ def calculate_task_time_in_progress(task_id):
         # Calcular tiempo acumulado
         for record in history:
             status = record['new_status']
-            timestamp = datetime.fromisoformat(record['changed_at'])
+
+            # Parsear timestamp con manejo de errores robusto
+            try:
+                timestamp = datetime.fromisoformat(record['changed_at'])
+            except (ValueError, TypeError) as e:
+                print(f"[ERROR] Error al parsear fecha '{record['changed_at']}' para tarea {task_id}: {str(e)}")
+                # Intentar parsear con .replace('Z', '+00:00') por si es formato ISO con Z
+                try:
+                    timestamp = datetime.fromisoformat(record['changed_at'].replace('Z', '+00:00'))
+                except:
+                    print(f"[WARNING] No se pudo parsear fecha '{record['changed_at']}', saltando registro para tarea {task_id}")
+                    continue  # Saltar este registro y continuar con el siguiente
 
             if status == 'en_progreso':
                 # Inicio de un periodo en progreso
                 in_progress_start = timestamp
             elif in_progress_start:
                 # Fin de un periodo en progreso
-                duration = (timestamp - in_progress_start).total_seconds()
-                total_seconds += duration
-                in_progress_start = None
+                try:
+                    duration = (timestamp - in_progress_start).total_seconds()
+                    total_seconds += duration
+                    in_progress_start = None
+                except Exception as e:
+                    print(f"[ERROR] Error al calcular duración para tarea {task_id}: {str(e)}")
+                    in_progress_start = None  # Resetear para evitar cálculos incorrectos
 
         # Si actualmente está en progreso, el periodo actual está abierto
         is_currently_in_progress = current_status == 'en_progreso'
