@@ -1477,43 +1477,75 @@ def obtener_alerta_tarea_endpoint(tarea_id):
         print(f"[ERROR] Error al obtener alerta de tarea: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-def enviar_email_alerta(email_destino, tarea_nombre, tarea_url, tiempo_sin_actualizacion):
-    """Envía un email de alerta cuando una tarea no ha sido actualizada"""
+def enviar_email_alerta(email_destino, tarea_nombre, proyecto_nombre, tarea_url, tiempo_en_progreso):
+    """Envía un email de alerta cuando una tarea supera su tiempo máximo en progreso"""
     try:
         if not SMTP_EMAIL or not SMTP_PASSWORD:
             print("[WARNING] Configuración de email no disponible. No se puede enviar email.")
             return False
 
         msg = MIMEMultipart('alternative')
-        msg['Subject'] = f'Alerta: Tarea sin actualización - {tarea_nombre}'
+        msg['Subject'] = f'⚠️ Alerta: Demora en tarea "{tarea_nombre}" - {proyecto_nombre}'
         msg['From'] = SMTP_EMAIL
         msg['To'] = email_destino
 
         # Crear el cuerpo del email en HTML
         html = f"""
         <html>
-          <head></head>
+          <head>
+            <style>
+              body {{ font-family: Arial, sans-serif; line-height: 1.6; }}
+              .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+              .header {{ background-color: #f8d7da; color: #721c24; padding: 15px; border-radius: 5px; margin-bottom: 20px; }}
+              .content {{ background-color: #f9f9f9; padding: 20px; border-radius: 5px; }}
+              .btn {{ background-color: #667eea; color: white; padding: 12px 24px; text-decoration: none;
+                     border-radius: 5px; display: inline-block; margin-top: 15px; }}
+              .footer {{ color: #666; font-size: 12px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; }}
+              .warning-icon {{ font-size: 48px; margin-bottom: 10px; }}
+            </style>
+          </head>
           <body>
-            <h2>Alerta de Tarea sin Actualización</h2>
-            <p>La tarea <strong>{tarea_nombre}</strong> no ha recibido actualizaciones en <strong>{tiempo_sin_actualizacion}</strong>.</p>
-            <p>Por favor, revisa el estado de esta tarea:</p>
-            <p><a href="{tarea_url}" style="background-color: #667eea; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Ver Tarea en ClickUp</a></p>
-            <br>
-            <p style="color: #666;">Este es un email automático del sistema Virtual Controller SIDN.</p>
+            <div class="container">
+              <div class="header">
+                <div class="warning-icon">⚠️</div>
+                <h2 style="margin: 0;">Alerta de Demora en Tarea</h2>
+              </div>
+              <div class="content">
+                <p><strong>Proyecto:</strong> {proyecto_nombre}</p>
+                <p><strong>Tarea:</strong> {tarea_nombre}</p>
+                <p style="font-size: 16px; color: #d9534f;">
+                  ⏱️ Esta tarea lleva <strong>{tiempo_en_progreso}</strong> en estado "En Progreso"
+                  y ha superado el tiempo máximo configurado.
+                </p>
+                <p>Por favor, revisa el estado de esta tarea y toma las acciones necesarias:</p>
+                <a href="{tarea_url}" class="btn">Ver Tarea en ClickUp</a>
+              </div>
+              <div class="footer">
+                <p>Este es un email automático del sistema Virtual Controller SIDN.</p>
+                <p>La alerta ha sido desactivada automáticamente. Para recibir una nueva alerta,
+                   reactiva la configuración desde el panel de control.</p>
+              </div>
+            </div>
           </body>
         </html>
         """
 
         # Crear el cuerpo del email en texto plano
         text = f"""
-        Alerta de Tarea sin Actualización
+⚠️ ALERTA DE DEMORA EN TAREA ⚠️
 
-        La tarea "{tarea_nombre}" no ha recibido actualizaciones en {tiempo_sin_actualizacion}.
+Proyecto: {proyecto_nombre}
+Tarea: {tarea_nombre}
 
-        Por favor, revisa el estado de esta tarea:
-        {tarea_url}
+Esta tarea lleva {tiempo_en_progreso} en estado "En Progreso" y ha superado el tiempo máximo configurado.
 
-        Este es un email automático del sistema Virtual Controller SIDN.
+Por favor, revisa el estado de esta tarea y toma las acciones necesarias:
+{tarea_url}
+
+---
+Este es un email automático del sistema Virtual Controller SIDN.
+La alerta ha sido desactivada automáticamente. Para recibir una nueva alerta,
+reactiva la configuración desde el panel de control.
         """
 
         part1 = MIMEText(text, 'plain')
@@ -1522,110 +1554,146 @@ def enviar_email_alerta(email_destino, tarea_nombre, tarea_url, tiempo_sin_actua
         msg.attach(part1)
         msg.attach(part2)
 
-        # Enviar el email
+        # Enviar el email usando SMTP de Brevo
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
             server.starttls()
             server.login(SMTP_EMAIL, SMTP_PASSWORD)
             server.send_message(msg)
 
-        print(f"[INFO] Email de alerta enviado a {email_destino} para tarea {tarea_nombre}")
+        print(f"[INFO] Email de alerta de demora enviado a {email_destino} para tarea '{tarea_nombre}' del proyecto '{proyecto_nombre}'")
         return True
 
     except Exception as e:
-        print(f"[ERROR] Error al enviar email: {str(e)}")
+        print(f"[ERROR] Error al enviar email de alerta: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return False
 
 @app.route('/api/verificar-alertas', methods=['POST'])
 def verificar_alertas():
-    """Verifica si alguna tarea necesita enviar alerta basándose en su última actualización"""
+    """Verifica si alguna tarea en progreso necesita enviar alerta basándose en su tiempo en progreso"""
     try:
-        headers = get_headers()
-        if not headers:
-            return jsonify({'error': 'No autenticado'}), 401
+        print("[INFO] ===== Iniciando verificación de alertas =====")
 
-        data = request.json
-        tareas_a_verificar = data.get('tareas', [])
+        # Obtener todas las alertas activas de la base de datos
+        alertas_activas = db.get_all_active_alerts()
+        print(f"[INFO] Se encontraron {len(alertas_activas)} alertas activas configuradas")
 
         alertas_enviadas = []
 
-        for tarea_data in tareas_a_verificar:
-            tarea_id = tarea_data['id']
+        for alerta in alertas_activas:
+            tarea_id = alerta['task_id']
+            tarea_nombre = alerta['task_name']
+            tarea_url = alerta['task_url']
+            email_destino = alerta['email_aviso']
+            tiempo_max_horas = alerta['aviso_horas']
+            tiempo_max_minutos = alerta['aviso_minutos']
 
-            # Verificar si esta tarea tiene alerta configurada
-            if tarea_id not in alertas_tareas:
+            print(f"\n[INFO] Verificando alerta para tarea: {tarea_nombre} (ID: {tarea_id})")
+
+            # Calcular el tiempo máximo configurado en segundos
+            tiempo_max_segundos = (tiempo_max_horas * 3600) + (tiempo_max_minutos * 60)
+
+            if tiempo_max_segundos <= 0:
+                print(f"[WARNING] Tarea {tarea_id} tiene tiempo máximo de 0. Saltando...")
                 continue
 
-            config_alerta = alertas_tareas[tarea_id]
-
-            if not config_alerta.get('aviso_activado'):
+            if not email_destino:
+                print(f"[WARNING] Tarea {tarea_id} no tiene email configurado. Saltando...")
                 continue
 
-            # Obtener información actualizada de la tarea desde ClickUp
             try:
-                tarea_response = requests.get(
-                    f'https://api.clickup.com/api/v2/task/{tarea_id}',
-                    headers=headers,
-                    timeout=10
-                )
+                # Obtener información de la tarea desde la BD
+                tarea_bd = db.get_task(tarea_id)
 
-                if tarea_response.status_code != 200:
-                    print(f"[WARNING] No se pudo obtener información de tarea {tarea_id}")
+                if not tarea_bd:
+                    print(f"[WARNING] Tarea {tarea_id} no encontrada en BD. Saltando...")
                     continue
 
-                tarea = tarea_response.json()
+                # Verificar si la tarea está actualmente en progreso
+                if tarea_bd['status'] != 'en_progreso':
+                    print(f"[INFO] Tarea {tarea_id} no está en estado 'en_progreso' (estado actual: {tarea_bd['status']}). Saltando...")
+                    continue
 
-                # Obtener la última fecha de actualización
-                fecha_actualizacion = datetime.fromtimestamp(int(tarea['date_updated']) / 1000)
-                tiempo_transcurrido = datetime.now() - fecha_actualizacion
+                # Calcular el tiempo total en progreso
+                tiempo_data = db.calculate_task_time_in_progress(tarea_id)
+                tiempo_en_progreso_segundos = tiempo_data['total_seconds']
 
-                # Calcular el tiempo de alerta configurado
-                tiempo_alerta = timedelta(
-                    hours=config_alerta.get('aviso_horas', 0),
-                    minutes=config_alerta.get('aviso_minutos', 0)
-                )
+                # Si está actualmente en progreso, sumar el tiempo de la sesión actual
+                if tiempo_data['is_currently_in_progress'] and tiempo_data['current_session_start']:
+                    try:
+                        session_start = datetime.fromisoformat(tiempo_data['current_session_start'])
+                        tiempo_sesion_actual = (datetime.now() - session_start).total_seconds()
+                        tiempo_en_progreso_segundos += tiempo_sesion_actual
+                        print(f"[INFO] Sumando tiempo de sesión actual: {tiempo_sesion_actual/3600:.2f}h")
+                    except Exception as e:
+                        print(f"[WARNING] Error al calcular tiempo de sesión actual: {str(e)}")
 
-                # Verificar si ya pasó el tiempo de alerta
-                if tiempo_transcurrido >= tiempo_alerta:
-                    # Verificar si ya se envió un email recientemente (no enviar más de 1 por día)
-                    ultimo_envio = config_alerta.get('ultimo_envio_email')
-                    if ultimo_envio:
-                        ultimo_envio_dt = datetime.fromisoformat(ultimo_envio)
-                        if datetime.now() - ultimo_envio_dt < timedelta(days=1):
-                            continue
+                print(f"[INFO] Tiempo en progreso: {tiempo_en_progreso_segundos/3600:.2f}h ({tiempo_en_progreso_segundos}s)")
+                print(f"[INFO] Tiempo máximo configurado: {tiempo_max_segundos/3600:.2f}h ({tiempo_max_segundos}s)")
+
+                # Verificar si se superó el tiempo máximo
+                if tiempo_en_progreso_segundos >= tiempo_max_segundos:
+                    print(f"[ALERT] ⚠️ ¡Tarea {tarea_id} ha superado el tiempo máximo!")
+
+                    # Formatear el tiempo en progreso para el email
+                    horas = int(tiempo_en_progreso_segundos // 3600)
+                    minutos = int((tiempo_en_progreso_segundos % 3600) // 60)
+                    tiempo_en_progreso_str = f"{horas} horas y {minutos} minutos"
+
+                    # Obtener el nombre del proyecto
+                    proyecto_nombre = db.get_task_project_name(tarea_id)
 
                     # Enviar email de alerta
-                    email_destino = config_alerta.get('email_aviso')
-                    if email_destino:
-                        # Formatear el tiempo sin actualización
-                        horas = int(tiempo_transcurrido.total_seconds() // 3600)
-                        minutos = int((tiempo_transcurrido.total_seconds() % 3600) // 60)
-                        tiempo_sin_act = f"{horas} horas y {minutos} minutos"
+                    print(f"[INFO] Enviando email de alerta a {email_destino}...")
+                    if enviar_email_alerta(
+                        email_destino,
+                        tarea_nombre,
+                        proyecto_nombre,
+                        tarea_url,
+                        tiempo_en_progreso_str
+                    ):
+                        print(f"[SUCCESS] ✓ Email enviado exitosamente")
 
-                        if enviar_email_alerta(
-                            email_destino,
-                            tarea['name'],
-                            tarea['url'],
-                            tiempo_sin_act
-                        ):
-                            # Actualizar fecha del último envío
+                        # Desactivar la alerta después del envío
+                        db.deactivate_task_alert(tarea_id)
+
+                        # También actualizar la caché en memoria si existe
+                        if tarea_id in alertas_tareas:
+                            alertas_tareas[tarea_id]['aviso_activado'] = False
                             alertas_tareas[tarea_id]['ultimo_envio_email'] = datetime.now().isoformat()
-                            alertas_enviadas.append({
-                                'tarea_id': tarea_id,
-                                'nombre': tarea['name'],
-                                'email': email_destino
-                            })
+
+                        alertas_enviadas.append({
+                            'tarea_id': tarea_id,
+                            'nombre': tarea_nombre,
+                            'proyecto': proyecto_nombre,
+                            'email': email_destino,
+                            'tiempo_en_progreso': tiempo_en_progreso_str
+                        })
+                    else:
+                        print(f"[ERROR] ✗ No se pudo enviar el email")
+                else:
+                    diferencia = tiempo_max_segundos - tiempo_en_progreso_segundos
+                    print(f"[INFO] Tarea aún no supera el límite. Faltan {diferencia/3600:.2f}h")
 
             except Exception as e:
-                print(f"[ERROR] Error al verificar tarea {tarea_id}: {str(e)}")
+                print(f"[ERROR] Error al procesar alerta para tarea {tarea_id}: {str(e)}")
+                import traceback
+                traceback.print_exc()
                 continue
+
+        print(f"\n[INFO] ===== Verificación completada. {len(alertas_enviadas)} alertas enviadas =====")
 
         return jsonify({
             'success': True,
-            'alertas_enviadas': alertas_enviadas
+            'alertas_enviadas': alertas_enviadas,
+            'total_verificadas': len(alertas_activas)
         })
 
     except Exception as e:
-        print(f"[ERROR] Error en verificación de alertas: {str(e)}")
+        print(f"[ERROR] Error crítico en verificación de alertas: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 

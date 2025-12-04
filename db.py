@@ -485,6 +485,35 @@ def update_alert_last_sent(task_id):
         conn.commit()
 
 
+def deactivate_task_alert(task_id):
+    """Desactiva una alerta de tarea después de enviar el email"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE task_alerts
+            SET aviso_activado = 0,
+                ultimo_envio_email = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE task_id = ?
+        """, (task_id,))
+        conn.commit()
+        print(f"[INFO] Alerta desactivada para tarea {task_id}")
+
+
+def get_task_project_name(task_id):
+    """Obtiene el nombre del proyecto/lista de una tarea"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT l.name as project_name
+            FROM tasks t
+            JOIN lists l ON t.list_id = l.id
+            WHERE t.id = ?
+        """, (task_id,))
+        row = cursor.fetchone()
+        return dict(row)['project_name'] if row else "Proyecto desconocido"
+
+
 # === FUNCIONES PARA WEBHOOKS LOG ===
 
 def log_webhook(event_type, payload, task_id=None, list_id=None, folder_id=None, space_id=None):
