@@ -2636,28 +2636,36 @@ def export_to_google_sheets():
         espacios = db.get_all_spaces()
         proyectos_con_horas = []
 
+        print(f"[INFO] Procesando {len(espacios)} espacios...")
+
         for espacio in espacios:
             # Obtener folders del espacio
             folders = db.get_folders_by_space(espacio['id'])
+            print(f"[INFO] Espacio '{espacio['name']}': {len(folders)} folders")
+
             for folder in folders:
                 horas_totales = calcular_horas_proyecto('folder', folder['id'], fecha_inicio_dt, fecha_fin_dt)
-                if horas_totales > 0:
-                    proyectos_con_horas.append({
-                        'nombre': folder['name'],
-                        'horas': horas_totales
-                    })
+                print(f"[INFO] Folder '{folder['name']}': {horas_totales:.2f} horas")
+                # Añadir TODOS los proyectos, incluso con 0 horas
+                proyectos_con_horas.append({
+                    'nombre': folder['name'],
+                    'horas': horas_totales
+                })
 
             # Obtener lists del espacio
             lists = db.get_lists_by_space(espacio['id'])
+            print(f"[INFO] Espacio '{espacio['name']}': {len(lists)} listas")
+
             for lista in lists:
                 horas_totales = calcular_horas_proyecto('list', lista['id'], fecha_inicio_dt, fecha_fin_dt)
-                if horas_totales > 0:
-                    proyectos_con_horas.append({
-                        'nombre': lista['name'],
-                        'horas': horas_totales
-                    })
+                print(f"[INFO] Lista '{lista['name']}': {horas_totales:.2f} horas")
+                # Añadir TODOS los proyectos, incluso con 0 horas
+                proyectos_con_horas.append({
+                    'nombre': lista['name'],
+                    'horas': horas_totales
+                })
 
-        print(f"[INFO] Se encontraron {len(proyectos_con_horas)} proyectos con horas")
+        print(f"[INFO] Total de proyectos a exportar: {len(proyectos_con_horas)}")
 
         # Preparar datos para Google Sheets
         fecha_reporte = datetime.now().strftime('%Y-%m-%d')
@@ -2739,13 +2747,14 @@ def export_to_google_sheets():
 
 def calcular_horas_proyecto(project_type, project_id, fecha_inicio, fecha_fin):
     """
-    Calcula las horas totales de un proyecto en un rango de fechas.
+    Calcula las horas totales de un proyecto.
+    Por ahora calcula el tiempo total de siempre (ignora las fechas).
 
     Args:
         project_type: 'folder' o 'list'
         project_id: ID del proyecto
-        fecha_inicio: datetime de inicio
-        fecha_fin: datetime de fin
+        fecha_inicio: datetime de inicio (NO USADO - para compatibilidad)
+        fecha_fin: datetime de fin (NO USADO - para compatibilidad)
 
     Returns:
         float: Total de horas trabajadas
@@ -2761,44 +2770,22 @@ def calcular_horas_proyecto(project_type, project_id, fecha_inicio, fecha_fin):
         else:  # list
             tareas = db.get_tasks_by_list(project_id)
 
+        print(f"[DEBUG] Proyecto {project_type} {project_id}: {len(tareas)} tareas")
+
         total_segundos = 0
 
         for tarea in tareas:
-            # Obtener el historial de estados de la tarea
-            historial = db.get_task_status_history(tarea['id'])
+            # Obtener el tiempo total usando la función de cálculo existente
+            time_data = db.calculate_task_time_in_progress(tarea['id'])
 
-            # Calcular tiempo en "in_progress" dentro del rango de fechas
-            for i, cambio in enumerate(historial):
-                if cambio['new_status'] == 'in_progress':
-                    # Inicio del período en progreso
-                    inicio_progreso = datetime.fromisoformat(cambio['changed_at'].replace('Z', '+00:00'))
-
-                    # Buscar el siguiente cambio de estado (cuando dejó de estar en progreso)
-                    fin_progreso = None
-                    if i + 1 < len(historial):
-                        fin_progreso = datetime.fromisoformat(historial[i + 1]['changed_at'].replace('Z', '+00:00'))
-                    else:
-                        # Si sigue en progreso, usar la fecha actual o fecha_fin
-                        if tarea['status'] == 'in_progress':
-                            fin_progreso = min(datetime.now(), fecha_fin)
-                        else:
-                            # Usar la fecha de última actualización de la tarea
-                            if tarea.get('date_updated'):
-                                fin_progreso = datetime.fromisoformat(tarea['date_updated'].replace('Z', '+00:00'))
-
-                    if fin_progreso:
-                        # Ajustar al rango de fechas solicitado
-                        inicio_efectivo = max(inicio_progreso, fecha_inicio)
-                        fin_efectivo = min(fin_progreso, fecha_fin)
-
-                        # Solo contar si está dentro del rango
-                        if inicio_efectivo <= fin_efectivo:
-                            segundos = (fin_efectivo - inicio_efectivo).total_seconds()
-                            if segundos > 0:
-                                total_segundos += segundos
+            if time_data['total_seconds'] > 0:
+                print(f"[DEBUG] Tarea '{tarea['name']}': {time_data['total_seconds']/3600:.2f} horas totales")
+                total_segundos += time_data['total_seconds']
 
         # Convertir segundos a horas
         total_horas = total_segundos / 3600
+
+        print(f"[DEBUG] Total proyecto: {total_horas:.2f} horas")
 
         return total_horas
 
