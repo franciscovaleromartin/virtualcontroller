@@ -1791,8 +1791,13 @@ def enviar_email_alerta(email_destino, tarea_nombre, proyecto_nombre, tarea_url,
             print(f"[EMAIL]    SMTP_EMAIL: {'configurado' if SMTP_EMAIL else 'NO CONFIGURADO'}")
             return False
 
+        # Mostrar parte de la API key para verificar (sin exponer toda la clave)
+        api_key_preview = f"{BREVO_API_KEY[:10]}...{BREVO_API_KEY[-4:]}" if len(BREVO_API_KEY) > 14 else "CLAVE_DEMASIADO_CORTA"
+
         print(f"[EMAIL] ✓ Configuración API disponible")
         print(f"[EMAIL]    De: {SMTP_EMAIL}")
+        print(f"[EMAIL]    API Key (preview): {api_key_preview}")
+        print(f"[EMAIL]    API Key length: {len(BREVO_API_KEY)} caracteres")
 
         # Crear el cuerpo del email en HTML
         html_content = f"""
