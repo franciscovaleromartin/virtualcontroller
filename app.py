@@ -1769,11 +1769,20 @@ def obtener_alerta_tarea_endpoint(tarea_id):
 
 def enviar_email_alerta(email_destino, tarea_nombre, proyecto_nombre, tarea_url, tiempo_en_progreso):
     """Envía un email de alerta usando Brevo API (no SMTP porque Render bloquea puerto 587)"""
+    # Log ANTES del try/catch para asegurar que se ve
+    print("\n" + "="*80)
+    print("📧 FUNCIÓN enviar_email_alerta() LLAMADA")
+    print("="*80)
+
     try:
         print(f"\n[EMAIL] ===== Iniciando envío de email de alerta =====")
         print(f"[EMAIL] Destino: {email_destino}")
         print(f"[EMAIL] Tarea: {tarea_nombre}")
         print(f"[EMAIL] Proyecto: {proyecto_nombre}")
+
+        # Flush para forzar que los logs aparezcan inmediatamente
+        import sys
+        sys.stdout.flush()
 
         # Verificar configuración
         if not BREVO_API_KEY or not SMTP_EMAIL:
@@ -2177,9 +2186,13 @@ def debug_verificar_alertas_ahora():
                         })
                     else:
                         print(f"❌ [DEBUG] Error al enviar email")
+                        print(f"❌ [DEBUG] IMPORTANTE: Verifica en los logs de Render que:")
+                        print(f"❌ [DEBUG]   1. BREVO_API_KEY está configurado")
+                        print(f"❌ [DEBUG]   2. SMTP_EMAIL está configurado")
+                        print(f"❌ [DEBUG]   3. El servicio se reinició después de configurar las variables")
                         alertas_error.append({
                             'tarea': tarea_nombre,
-                            'error': 'Error al enviar email (ver logs SMTP anteriores)'
+                            'error': 'Error al enviar email via Brevo API (ver logs detallados arriba)'
                         })
                 else:
                     diferencia = (tiempo_max_segundos - tiempo_en_progreso) / 3600
