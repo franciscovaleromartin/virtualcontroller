@@ -1865,25 +1865,33 @@ reactiva la configuración desde el panel de control.
         print(f"[EMAIL] ✓ Contenido del mensaje adjuntado (HTML + texto plano)")
 
         # Enviar el email usando SMTP de Brevo
-        print(f"[EMAIL] Conectando al servidor SMTP...")
-        with smtplib.SMTP(SMTP_SERVER, int(SMTP_PORT), timeout=30) as server:
-            print(f"[EMAIL] ✓ Conexión establecida")
+        print(f"[EMAIL] Conectando al servidor SMTP {SMTP_SERVER}:{SMTP_PORT}...")
+        try:
+            with smtplib.SMTP(SMTP_SERVER, int(SMTP_PORT), timeout=30) as server:
+                print(f"[EMAIL] ✓ Conexión establecida")
 
-            print(f"[EMAIL] Iniciando STARTTLS...")
-            server.starttls()
-            print(f"[EMAIL] ✓ STARTTLS iniciado")
+                print(f"[EMAIL] Iniciando STARTTLS...")
+                server.starttls()
+                print(f"[EMAIL] ✓ STARTTLS iniciado")
 
-            print(f"[EMAIL] Autenticando...")
-            server.login(SMTP_EMAIL, SMTP_PASSWORD)
-            print(f"[EMAIL] ✓ Autenticación exitosa")
+                print(f"[EMAIL] Autenticando con {SMTP_EMAIL}...")
+                server.login(SMTP_EMAIL, SMTP_PASSWORD)
+                print(f"[EMAIL] ✓ Autenticación exitosa")
 
-            print(f"[EMAIL] Enviando mensaje...")
-            server.send_message(msg)
-            print(f"[EMAIL] ✓ Mensaje enviado exitosamente")
+                print(f"[EMAIL] Enviando mensaje...")
+                server.send_message(msg)
+                print(f"[EMAIL] ✓ Mensaje enviado exitosamente")
 
-        print(f"[EMAIL] ===== Email enviado a {email_destino} =====")
-        print(f"[INFO] ✅ Email de alerta enviado para tarea '{tarea_nombre}' del proyecto '{proyecto_nombre}'")
-        return True
+            print(f"[EMAIL] ===== Email enviado a {email_destino} =====")
+            print(f"[INFO] ✅ Email de alerta enviado para tarea '{tarea_nombre}' del proyecto '{proyecto_nombre}'")
+            return True
+        except Exception as smtp_error:
+            print(f"[EMAIL] ❌ ERROR durante conexión/envío SMTP:")
+            print(f"[EMAIL]    Tipo: {type(smtp_error).__name__}")
+            print(f"[EMAIL]    Mensaje: {str(smtp_error)}")
+            import traceback
+            traceback.print_exc()
+            raise  # Re-lanzar para que sea capturado por el try/except exterior
 
     except smtplib.SMTPAuthenticationError as e:
         print(f"[EMAIL] ❌ ERROR DE AUTENTICACIÓN SMTP:")
