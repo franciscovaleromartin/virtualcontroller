@@ -153,22 +153,47 @@ def verificar_alertas_automaticamente():
             import traceback
             traceback.print_exc()
 
-# Configurar scheduler de backend
-scheduler = BackgroundScheduler()
-scheduler.add_job(
-    func=verificar_alertas_automaticamente,
-    trigger=IntervalTrigger(minutes=5),  # Ejecutar cada 5 minutos
-    id='verificar_alertas_job',
-    name='Verificar alertas de tareas automáticamente',
-    replace_existing=True
-)
+# Inicializar scheduler solo en el worker principal
+# Usar file lock para asegurar que solo un worker ejecute el scheduler
+import fcntl
 
-# Iniciar scheduler
-scheduler.start()
-print("[STARTUP] ✓ Scheduler de backend iniciado (verificación cada 5 minutos)", flush=True)
+def init_scheduler():
+    """Inicializa el scheduler solo en un worker (usando file lock)"""
+    lock_file_path = '/tmp/scheduler_lock'
 
-# Asegurar que el scheduler se detenga al cerrar la app
-atexit.register(lambda: scheduler.shutdown())
+    try:
+        # Intentar abrir/crear el archivo de lock
+        lock_file = open(lock_file_path, 'w')
+        # Intentar obtener lock exclusivo (no bloqueante)
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+        # Si llegamos aquí, somos el worker principal
+        print(f"[STARTUP] Este worker obtuvo el lock del scheduler (PID: {os.getpid()})", flush=True)
+
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(
+            func=verificar_alertas_automaticamente,
+            trigger=IntervalTrigger(minutes=5),
+            id='verificar_alertas_job',
+            name='Verificar alertas de tareas automáticamente',
+            replace_existing=True
+        )
+
+        scheduler.start()
+        print("[STARTUP] ✓ Scheduler de backend iniciado (verificación cada 5 minutos)", flush=True)
+
+        # Asegurar shutdown cuando se cierre la app
+        atexit.register(lambda: scheduler.shutdown())
+
+        return True
+
+    except IOError:
+        # Otro worker ya tiene el lock
+        print(f"[STARTUP] Otro worker ya tiene el scheduler activo (PID: {os.getpid()})", flush=True)
+        return False
+
+# Intentar inicializar el scheduler
+init_scheduler()
 
 # ============================================================================
 
