@@ -2671,12 +2671,19 @@ def export_to_google_sheets():
         fecha_reporte = datetime.now().strftime('%Y-%m-%d')
         valores = []
 
+        print(f"[INFO] Preparando valores para {len(proyectos_con_horas)} proyectos...")
+
         for proyecto in proyectos_con_horas:
-            valores.append([
+            fila = [
                 fecha_reporte,
                 proyecto['nombre'],
                 f"{proyecto['horas']:.2f}"
-            ])
+            ]
+            valores.append(fila)
+            print(f"[INFO] Añadida fila: {fila}")
+
+        print(f"[INFO] Total de valores preparados: {len(valores)}")
+        print(f"[INFO] Valores a escribir: {valores}")
 
         # Escribir en Google Sheets
         service = build('sheets', 'v4', credentials=credentials)
@@ -2717,19 +2724,35 @@ def export_to_google_sheets():
 
         # Añadir los datos (append para añadir al final)
         if valores:
-            result = service.spreadsheets().values().append(
-                spreadsheetId=GOOGLE_SHEET_ID,
-                range=f'{SHEET_NAME}!A:C',
-                valueInputOption='RAW',
-                insertDataOption='INSERT_ROWS',
-                body={'values': valores}
-            ).execute()
+            print(f"[INFO] Escribiendo {len(valores)} filas en Google Sheets...")
+            print(f"[INFO] Sheet ID: {GOOGLE_SHEET_ID}")
+            print(f"[INFO] Sheet Name: {SHEET_NAME}")
+            print(f"[INFO] Range: {SHEET_NAME}!A:C")
 
-            filas_escritas = result.get('updates', {}).get('updatedRows', 0)
+            try:
+                result = service.spreadsheets().values().append(
+                    spreadsheetId=GOOGLE_SHEET_ID,
+                    range=f'{SHEET_NAME}!A:C',
+                    valueInputOption='RAW',
+                    insertDataOption='INSERT_ROWS',
+                    body={'values': valores}
+                ).execute()
+
+                print(f"[INFO] Respuesta de Google Sheets: {result}")
+                filas_escritas = result.get('updates', {}).get('updatedRows', 0)
+                print(f"[INFO] Filas escritas según Google: {filas_escritas}")
+            except Exception as e:
+                print(f"[ERROR] Error al escribir en Google Sheets: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                raise
         else:
+            print(f"[WARNING] No hay valores para escribir en el sheet")
             filas_escritas = 0
 
         sheet_url = f'https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/edit#gid=0'
+
+        print(f"[INFO] Exportación completada. Filas escritas: {filas_escritas}, Proyectos: {len(proyectos_con_horas)}")
 
         return jsonify({
             'success': True,
