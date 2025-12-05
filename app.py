@@ -2747,17 +2747,17 @@ def export_to_google_sheets():
 
 def calcular_horas_proyecto(project_type, project_id, fecha_inicio, fecha_fin):
     """
-    Calcula las horas totales de un proyecto.
-    Por ahora calcula el tiempo total de siempre (ignora las fechas).
+    Calcula las horas totales de un proyecto en el rango de fechas especificado.
+    Suma todo el tiempo que las tareas estuvieron en estado "en_progreso" dentro del rango.
 
     Args:
         project_type: 'folder' o 'list'
         project_id: ID del proyecto
-        fecha_inicio: datetime de inicio (NO USADO - para compatibilidad)
-        fecha_fin: datetime de fin (NO USADO - para compatibilidad)
+        fecha_inicio: datetime de inicio del rango
+        fecha_fin: datetime de fin del rango
 
     Returns:
-        float: Total de horas trabajadas
+        float: Total de horas trabajadas en el rango de fechas
     """
     try:
         # Obtener todas las tareas del proyecto
@@ -2770,22 +2770,79 @@ def calcular_horas_proyecto(project_type, project_id, fecha_inicio, fecha_fin):
         else:  # list
             tareas = db.get_tasks_by_list(project_id)
 
-        print(f"[DEBUG] Proyecto {project_type} {project_id}: {len(tareas)} tareas")
+        print(f"[DEBUG] Proyecto {project_type} {project_id}: {len(tareas)} tareas, rango: {fecha_inicio.date()} - {fecha_fin.date()}")
 
         total_segundos = 0
 
         for tarea in tareas:
-            # Obtener el tiempo total usando la función de cálculo existente
-            time_data = db.calculate_task_time_in_progress(tarea['id'])
+            # Obtener el historial de estados de la tarea
+            historial = db.get_status_history(tarea['id'])
 
-            if time_data['total_seconds'] > 0:
-                print(f"[DEBUG] Tarea '{tarea['name']}': {time_data['total_seconds']/3600:.2f} horas totales")
-                total_segundos += time_data['total_seconds']
+            if not historial:
+                continue
+
+            # Calcular tiempo en "en_progreso" dentro del rango de fechas
+            in_progress_start = None
+
+            for i, cambio in enumerate(historial):
+                try:
+                    # Parsear timestamp
+                    timestamp = datetime.fromisoformat(cambio['changed_at'].replace('Z', '+00:00'))
+                except:
+                    # Si falla el parseo, intentar sin timezone
+                    try:
+                        timestamp = datetime.fromisoformat(cambio['changed_at'])
+                    except:
+                        print(f"[WARNING] No se pudo parsear fecha '{cambio['changed_at']}' para tarea {tarea['name']}")
+                        continue
+
+                # Cuando cambia a "en_progreso", marcar inicio
+                if cambio['new_status'] == 'en_progreso':
+                    in_progress_start = timestamp
+
+                # Cuando cambia a otro estado, calcular duración del período en progreso
+                elif in_progress_start is not None:
+                    fin_progreso = timestamp
+
+                    # Calcular intersección con el rango de fechas
+                    inicio_efectivo = max(in_progress_start, fecha_inicio)
+                    fin_efectivo = min(fin_progreso, fecha_fin)
+
+                    # Solo sumar si hay intersección
+                    if inicio_efectivo < fin_efectivo:
+                        segundos = (fin_efectivo - inicio_efectivo).total_seconds()
+                        if segundos > 0:
+                            total_segundos += segundos
+                            print(f"[DEBUG]   Tarea '{tarea['name']}': +{segundos/3600:.2f}h ({inicio_efectivo.date()} - {fin_efectivo.date()})")
+
+                    in_progress_start = None
+
+            # Si la tarea sigue en progreso (no hubo cambio de estado después)
+            if in_progress_start is not None and tarea['status'] == 'en_progreso':
+                # Usar la fecha actual como fin, pero limitado a fecha_fin
+                ahora = datetime.now()
+                # Asegurar que ahora tenga timezone info si fecha_fin la tiene
+                if fecha_fin.tzinfo is not None and ahora.tzinfo is None:
+                    import pytz
+                    ahora = ahora.replace(tzinfo=pytz.UTC)
+
+                fin_progreso = min(ahora, fecha_fin)
+
+                # Calcular intersección con el rango de fechas
+                inicio_efectivo = max(in_progress_start, fecha_inicio)
+                fin_efectivo = min(fin_progreso, fecha_fin)
+
+                # Solo sumar si hay intersección
+                if inicio_efectivo < fin_efectivo:
+                    segundos = (fin_efectivo - inicio_efectivo).total_seconds()
+                    if segundos > 0:
+                        total_segundos += segundos
+                        print(f"[DEBUG]   Tarea '{tarea['name']}' (en progreso): +{segundos/3600:.2f}h ({inicio_efectivo.date()} - {fin_efectivo.date()})")
 
         # Convertir segundos a horas
         total_horas = total_segundos / 3600
 
-        print(f"[DEBUG] Total proyecto: {total_horas:.2f} horas")
+        print(f"[DEBUG] Total proyecto: {total_horas:.2f} horas en rango de fechas")
 
         return total_horas
 
