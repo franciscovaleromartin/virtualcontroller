@@ -19,6 +19,12 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 import atexit
 
+# Google OAuth y Sheets API
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import Flow
+from googleapiclient.discovery import build
+from google.auth.transport.requests import Request
+
 print(f"[STARTUP] Imports completados exitosamente", flush=True)
 
 load_dotenv()
@@ -55,6 +61,23 @@ SMTP_EMAIL = os.getenv('SMTP_EMAIL', '')  # Email del remitente
 
 # Configuración de webhook
 WEBHOOK_SECRET_TOKEN = os.getenv('WEBHOOK_SECRET_TOKEN', '')
+
+# Configuración de Google OAuth y Sheets
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
+GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
+GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:5000/oauth/google/callback')
+
+# Scopes necesarios para Google Sheets
+GOOGLE_SCOPES = [
+    'https://www.googleapis.com/auth/spreadsheets',
+    'https://www.googleapis.com/auth/drive.file',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'openid'
+]
+
+# ID del Google Sheet donde se exportarán los datos
+GOOGLE_SHEET_ID = '1Q1WUv9Cteq4McQh4MPCQFdK9_9stSjMvtVFKVW2VP1c'
+SHEET_NAME = 'Informe horas proyectos'
 
 # Almacenamiento en memoria de alertas por tarea
 # Estructura: {tarea_id: {aviso_activado, email_aviso, aviso_horas, aviso_minutos, ultima_actualizacion, ultimo_envio_email}}
@@ -2394,6 +2417,396 @@ def get_task_status_history_api(task_id):
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# ENDPOINTS DE GOOGLE OAUTH Y GOOGLE SHEETS
+# ============================================================================
+
+@app.route('/oauth/google/login')
+def google_oauth_login():
+    """Inicia el flujo de OAuth de Google"""
+    try:
+        # Crear el objeto de configuración para OAuth
+        client_config = {
+            "web": {
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "redirect_uris": [GOOGLE_REDIRECT_URI],
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token"
+            }
+        }
+
+        # Crear el flujo de OAuth
+        flow = Flow.from_client_config(
+            client_config,
+            scopes=GOOGLE_SCOPES,
+            redirect_uri=GOOGLE_REDIRECT_URI
+        )
+
+        # Generar la URL de autorización
+        authorization_url, state = flow.authorization_url(
+            access_type='offline',
+            include_granted_scopes='true',
+            prompt='consent'
+        )
+
+        # Guardar el state en la sesión para verificar después
+        session['google_oauth_state'] = state
+
+        return redirect(authorization_url)
+
+    except Exception as e:
+        print(f"[ERROR] Error al iniciar login de Google: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/oauth/google/callback')
+def google_oauth_callback():
+    """Callback de OAuth de Google"""
+    try:
+        # Verificar el state para prevenir CSRF
+        state = session.get('google_oauth_state')
+        if not state:
+            return "Error: No se encontró el estado de OAuth", 400
+
+        # Crear el objeto de configuración para OAuth
+        client_config = {
+            "web": {
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "redirect_uris": [GOOGLE_REDIRECT_URI],
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token"
+            }
+        }
+
+        # Crear el flujo de OAuth
+        flow = Flow.from_client_config(
+            client_config,
+            scopes=GOOGLE_SCOPES,
+            state=state,
+            redirect_uri=GOOGLE_REDIRECT_URI
+        )
+
+        # Obtener el token usando el código de autorización
+        flow.fetch_token(authorization_response=request.url)
+
+        # Guardar las credenciales en la sesión
+        credentials = flow.credentials
+        session['google_credentials'] = {
+            'token': credentials.token,
+            'refresh_token': credentials.refresh_token,
+            'token_uri': credentials.token_uri,
+            'client_id': credentials.client_id,
+            'client_secret': credentials.client_secret,
+            'scopes': credentials.scopes
+        }
+
+        # Obtener el email del usuario
+        try:
+            service = build('oauth2', 'v2', credentials=credentials)
+            user_info = service.userinfo().get().execute()
+            session['google_email'] = user_info.get('email', '')
+        except Exception as e:
+            print(f"[WARNING] No se pudo obtener el email del usuario: {str(e)}")
+            session['google_email'] = ''
+
+        # Cerrar la ventana popup y notificar al padre
+        return """
+        <html>
+        <script>
+            window.opener.postMessage({
+                type: 'google-auth-success',
+                token: '""" + credentials.token + """',
+                email: '""" + session.get('google_email', '') + """'
+            }, '*');
+            window.close();
+        </script>
+        <body>
+            <p>Autenticación exitosa. Puedes cerrar esta ventana.</p>
+        </body>
+        </html>
+        """
+
+    except Exception as e:
+        print(f"[ERROR] Error en callback de Google: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return f"Error en la autenticación: {str(e)}", 500
+
+
+@app.route('/api/google/auth-status')
+def google_auth_status():
+    """Verifica si el usuario está autenticado con Google"""
+    try:
+        google_creds = session.get('google_credentials')
+
+        if google_creds:
+            # Verificar si el token sigue siendo válido
+            credentials = Credentials(
+                token=google_creds['token'],
+                refresh_token=google_creds.get('refresh_token'),
+                token_uri=google_creds['token_uri'],
+                client_id=google_creds['client_id'],
+                client_secret=google_creds['client_secret'],
+                scopes=google_creds['scopes']
+            )
+
+            # Si el token expiró, intentar refrescarlo
+            if credentials.expired and credentials.refresh_token:
+                credentials.refresh(Request())
+                # Actualizar las credenciales en la sesión
+                session['google_credentials']['token'] = credentials.token
+
+            return jsonify({
+                'authenticated': True,
+                'email': session.get('google_email', ''),
+                'token': credentials.token
+            })
+        else:
+            return jsonify({'authenticated': False})
+
+    except Exception as e:
+        print(f"[ERROR] Error al verificar estado de Google Auth: {str(e)}")
+        return jsonify({'authenticated': False})
+
+
+@app.route('/api/google/logout', methods=['POST'])
+def google_logout():
+    """Desconecta al usuario de Google"""
+    try:
+        if 'google_credentials' in session:
+            del session['google_credentials']
+        if 'google_email' in session:
+            del session['google_email']
+        if 'google_oauth_state' in session:
+            del session['google_oauth_state']
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        print(f"[ERROR] Error al desconectar de Google: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/export-to-google-sheets', methods=['POST'])
+def export_to_google_sheets():
+    """Exporta el informe de horas de proyectos a Google Sheets"""
+    try:
+        # Verificar autenticación de Google
+        google_creds = session.get('google_credentials')
+        if not google_creds:
+            return jsonify({'error': 'No estás autenticado con Google'}), 401
+
+        # Obtener parámetros
+        data = request.json
+        fecha_inicio = data.get('fecha_inicio')
+        fecha_fin = data.get('fecha_fin')
+
+        if not fecha_inicio or not fecha_fin:
+            return jsonify({'error': 'Faltan las fechas de inicio y fin'}), 400
+
+        # Convertir fechas a datetime
+        fecha_inicio_dt = datetime.strptime(fecha_inicio, '%Y-%m-%d')
+        fecha_fin_dt = datetime.strptime(fecha_fin, '%Y-%m-%d')
+        fecha_fin_dt = fecha_fin_dt.replace(hour=23, minute=59, second=59)
+
+        print(f"[INFO] Exportando informe desde {fecha_inicio} hasta {fecha_fin}")
+
+        # Crear credenciales de Google
+        credentials = Credentials(
+            token=google_creds['token'],
+            refresh_token=google_creds.get('refresh_token'),
+            token_uri=google_creds['token_uri'],
+            client_id=google_creds['client_id'],
+            client_secret=google_creds['client_secret'],
+            scopes=google_creds['scopes']
+        )
+
+        # Refrescar token si es necesario
+        if credentials.expired and credentials.refresh_token:
+            credentials.refresh(Request())
+            session['google_credentials']['token'] = credentials.token
+
+        # Obtener todos los proyectos (folders y lists) de todos los espacios
+        espacios = db.get_all_spaces()
+        proyectos_con_horas = []
+
+        for espacio in espacios:
+            # Obtener folders del espacio
+            folders = db.get_folders_by_space(espacio['id'])
+            for folder in folders:
+                horas_totales = calcular_horas_proyecto('folder', folder['id'], fecha_inicio_dt, fecha_fin_dt)
+                if horas_totales > 0:
+                    proyectos_con_horas.append({
+                        'nombre': folder['name'],
+                        'horas': horas_totales
+                    })
+
+            # Obtener lists del espacio
+            lists = db.get_lists_by_space(espacio['id'])
+            for lista in lists:
+                horas_totales = calcular_horas_proyecto('list', lista['id'], fecha_inicio_dt, fecha_fin_dt)
+                if horas_totales > 0:
+                    proyectos_con_horas.append({
+                        'nombre': lista['name'],
+                        'horas': horas_totales
+                    })
+
+        print(f"[INFO] Se encontraron {len(proyectos_con_horas)} proyectos con horas")
+
+        # Preparar datos para Google Sheets
+        fecha_reporte = datetime.now().strftime('%Y-%m-%d')
+        valores = []
+
+        for proyecto in proyectos_con_horas:
+            valores.append([
+                fecha_reporte,
+                proyecto['nombre'],
+                f"{proyecto['horas']:.2f}"
+            ])
+
+        # Escribir en Google Sheets
+        service = build('sheets', 'v4', credentials=credentials)
+
+        # Primero verificar si existe la hoja, si no, crearla
+        try:
+            sheet_metadata = service.spreadsheets().get(spreadsheetId=GOOGLE_SHEET_ID).execute()
+            sheets = sheet_metadata.get('sheets', [])
+            sheet_exists = any(sheet['properties']['title'] == SHEET_NAME for sheet in sheets)
+
+            if not sheet_exists:
+                # Crear la hoja
+                request_body = {
+                    'requests': [{
+                        'addSheet': {
+                            'properties': {
+                                'title': SHEET_NAME
+                            }
+                        }
+                    }]
+                }
+                service.spreadsheets().batchUpdate(
+                    spreadsheetId=GOOGLE_SHEET_ID,
+                    body=request_body
+                ).execute()
+
+                # Añadir cabeceras
+                cabeceras = [['Fecha Reporte', 'Nombre Proyecto', 'Total Horas Registradas']]
+                service.spreadsheets().values().update(
+                    spreadsheetId=GOOGLE_SHEET_ID,
+                    range=f'{SHEET_NAME}!A1:C1',
+                    valueInputOption='RAW',
+                    body={'values': cabeceras}
+                ).execute()
+
+        except Exception as e:
+            print(f"[WARNING] Error al verificar/crear hoja: {str(e)}")
+
+        # Añadir los datos (append para añadir al final)
+        if valores:
+            result = service.spreadsheets().values().append(
+                spreadsheetId=GOOGLE_SHEET_ID,
+                range=f'{SHEET_NAME}!A:C',
+                valueInputOption='RAW',
+                insertDataOption='INSERT_ROWS',
+                body={'values': valores}
+            ).execute()
+
+            filas_escritas = result.get('updates', {}).get('updatedRows', 0)
+        else:
+            filas_escritas = 0
+
+        sheet_url = f'https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/edit#gid=0'
+
+        return jsonify({
+            'success': True,
+            'filas_escritas': filas_escritas,
+            'url': sheet_url,
+            'proyectos_exportados': len(proyectos_con_horas)
+        })
+
+    except Exception as e:
+        print(f"[ERROR] Error al exportar a Google Sheets: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+def calcular_horas_proyecto(project_type, project_id, fecha_inicio, fecha_fin):
+    """
+    Calcula las horas totales de un proyecto en un rango de fechas.
+
+    Args:
+        project_type: 'folder' o 'list'
+        project_id: ID del proyecto
+        fecha_inicio: datetime de inicio
+        fecha_fin: datetime de fin
+
+    Returns:
+        float: Total de horas trabajadas
+    """
+    try:
+        # Obtener todas las tareas del proyecto
+        if project_type == 'folder':
+            # Obtener listas del folder
+            listas = db.get_lists_by_folder(project_id)
+            tareas = []
+            for lista in listas:
+                tareas.extend(db.get_tasks_by_list(lista['id']))
+        else:  # list
+            tareas = db.get_tasks_by_list(project_id)
+
+        total_segundos = 0
+
+        for tarea in tareas:
+            # Obtener el historial de estados de la tarea
+            historial = db.get_task_status_history(tarea['id'])
+
+            # Calcular tiempo en "in_progress" dentro del rango de fechas
+            for i, cambio in enumerate(historial):
+                if cambio['new_status'] == 'in_progress':
+                    # Inicio del período en progreso
+                    inicio_progreso = datetime.fromisoformat(cambio['changed_at'].replace('Z', '+00:00'))
+
+                    # Buscar el siguiente cambio de estado (cuando dejó de estar en progreso)
+                    fin_progreso = None
+                    if i + 1 < len(historial):
+                        fin_progreso = datetime.fromisoformat(historial[i + 1]['changed_at'].replace('Z', '+00:00'))
+                    else:
+                        # Si sigue en progreso, usar la fecha actual o fecha_fin
+                        if tarea['status'] == 'in_progress':
+                            fin_progreso = min(datetime.now(), fecha_fin)
+                        else:
+                            # Usar la fecha de última actualización de la tarea
+                            if tarea.get('date_updated'):
+                                fin_progreso = datetime.fromisoformat(tarea['date_updated'].replace('Z', '+00:00'))
+
+                    if fin_progreso:
+                        # Ajustar al rango de fechas solicitado
+                        inicio_efectivo = max(inicio_progreso, fecha_inicio)
+                        fin_efectivo = min(fin_progreso, fecha_fin)
+
+                        # Solo contar si está dentro del rango
+                        if inicio_efectivo <= fin_efectivo:
+                            segundos = (fin_efectivo - inicio_efectivo).total_seconds()
+                            if segundos > 0:
+                                total_segundos += segundos
+
+        # Convertir segundos a horas
+        total_horas = total_segundos / 3600
+
+        return total_horas
+
+    except Exception as e:
+        print(f"[ERROR] Error al calcular horas del proyecto {project_id}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return 0.0
 
 
 if __name__ == '__main__':
