@@ -421,13 +421,6 @@
                 <input type="hidden" id="modal-tarea-id">
 
                 <div class="form-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="aviso-activado">
-                        <span>Activar aviso de demora</span>
-                    </label>
-                </div>
-
-                <div class="form-group">
                     <label for="email-aviso">Email para notificaciones:</label>
                     <input type="email" id="email-aviso" placeholder="ejemplo@correo.com">
                 </div>
@@ -441,8 +434,8 @@
                 </div>
 
                 <div class="modal-buttons">
-                    <button type="button" class="btn btn-secondary" onclick="cerrarModal()">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Guardar</button>
+                    <button type="button" class="btn btn-secondary" onclick="desactivarAlerta()">Desactivar</button>
+                    <button type="button" class="btn btn-primary" onclick="activarAlerta()">Activar</button>
                 </div>
             </form>
         </div>
@@ -919,7 +912,6 @@
             const modal = document.getElementById('alerta-modal');
             const modalTareaId = document.getElementById('modal-tarea-id');
             const modalTareaNombre = document.getElementById('modal-tarea-nombre');
-            const avisoActivado = document.getElementById('aviso-activado');
             const emailAviso = document.getElementById('email-aviso');
             const avisoHoras = document.getElementById('aviso-horas');
             const avisoMinutos = document.getElementById('aviso-minutos');
@@ -933,14 +925,12 @@
                 const response = await fetch(`/api/alerta/tarea/${tareaId}`);
                 const alerta = await response.json();
 
-                avisoActivado.checked = alerta.aviso_activado || false;
                 emailAviso.value = alerta.email_aviso || '';
                 avisoHoras.value = alerta.aviso_horas || 0;
                 avisoMinutos.value = alerta.aviso_minutos || 0;
             } catch (error) {
                 console.error('Error al cargar configuración de alerta:', error);
                 // Valores por defecto si hay error
-                avisoActivado.checked = false;
                 emailAviso.value = '';
                 avisoHoras.value = 0;
                 avisoMinutos.value = 0;
@@ -962,26 +952,21 @@
             }
         }
 
-        // Manejar el envío del formulario de alerta
-        document.getElementById('alerta-form').addEventListener('submit', async function (e) {
-            e.preventDefault();
-
+        // Función para activar alerta
+        async function activarAlerta() {
             const tareaId = document.getElementById('modal-tarea-id').value;
-            const avisoActivado = document.getElementById('aviso-activado').checked;
             const emailAviso = document.getElementById('email-aviso').value;
             const avisoHoras = parseInt(document.getElementById('aviso-horas').value) || 0;
             const avisoMinutos = parseInt(document.getElementById('aviso-minutos').value) || 0;
 
             // Validaciones
-            if (avisoActivado) {
-                if (!emailAviso) {
-                    alert('Por favor, ingresa un email para las notificaciones.');
-                    return;
-                }
-                if (avisoHoras === 0 && avisoMinutos === 0) {
-                    alert('Por favor, ingresa un tiempo de aviso mayor a 0.');
-                    return;
-                }
+            if (!emailAviso) {
+                alert('Por favor, ingresa un email para las notificaciones.');
+                return;
+            }
+            if (avisoHoras === 0 && avisoMinutos === 0) {
+                alert('Por favor, ingresa un tiempo de aviso mayor a 0.');
+                return;
             }
 
             try {
@@ -992,7 +977,7 @@
                     },
                     body: JSON.stringify({
                         tarea_id: tareaId,
-                        aviso_activado: avisoActivado,
+                        aviso_activado: true,
                         email_aviso: emailAviso,
                         aviso_horas: avisoHoras,
                         aviso_minutos: avisoMinutos
@@ -1002,7 +987,7 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    alert('Alerta guardada correctamente');
+                    alert('Alerta activada correctamente');
                     cerrarModal();
                     // Recargar las tareas para mostrar la configuración actualizada
                     const projectSelect = document.getElementById('project-select');
@@ -1011,12 +996,50 @@
                         cargarTareasProyecto(projectData.type, projectData.id);
                     }
                 } else {
-                    alert('Error al guardar la alerta: ' + (result.error || 'Error desconocido'));
+                    alert('Error al activar la alerta: ' + (result.error || 'Error desconocido'));
                 }
             } catch (error) {
-                alert('Error al guardar la alerta: ' + error.message);
+                alert('Error al activar la alerta: ' + error.message);
             }
-        });
+        }
+
+        // Función para desactivar alerta
+        async function desactivarAlerta() {
+            const tareaId = document.getElementById('modal-tarea-id').value;
+
+            try {
+                const response = await fetch('/api/alerta/tarea/guardar', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        tarea_id: tareaId,
+                        aviso_activado: false,
+                        email_aviso: '',
+                        aviso_horas: 0,
+                        aviso_minutos: 0
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('Alerta desactivada correctamente');
+                    cerrarModal();
+                    // Recargar las tareas para mostrar la configuración actualizada
+                    const projectSelect = document.getElementById('project-select');
+                    if (projectSelect.value) {
+                        const projectData = JSON.parse(projectSelect.value);
+                        cargarTareasProyecto(projectData.type, projectData.id);
+                    }
+                } else {
+                    alert('Error al desactivar la alerta: ' + (result.error || 'Error desconocido'));
+                }
+            } catch (error) {
+                alert('Error al desactivar la alerta: ' + error.message);
+            }
+        }
 
         // Variable para almacenar el intervalo de verificación
         let intervaloVerificacion = null;
