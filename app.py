@@ -49,11 +49,9 @@ CLICKUP_CLIENT_SECRET = os.getenv('CLICKUP_CLIENT_SECRET')
 CLICKUP_API_TOKEN = os.getenv('CLICKUP_API_TOKEN')  # Token personal para webhooks
 REDIRECT_URI = os.getenv('REDIRECT_URI')  # URL de callback de OAuth
 
-# Configuración de email para alertas
-SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
-SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
-SMTP_EMAIL = os.getenv('SMTP_EMAIL', '')
-SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '')
+# Configuración de email para alertas (Brevo API - más confiable que SMTP)
+BREVO_API_KEY = os.getenv('BREVO_API_KEY', '')
+SMTP_EMAIL = os.getenv('SMTP_EMAIL', '')  # Email del remitente
 
 # Configuración de webhook
 WEBHOOK_SECRET_TOKEN = os.getenv('WEBHOOK_SECRET_TOKEN', '')
@@ -1770,35 +1768,25 @@ def obtener_alerta_tarea_endpoint(tarea_id):
         return jsonify({'error': str(e)}), 500
 
 def enviar_email_alerta(email_destino, tarea_nombre, proyecto_nombre, tarea_url, tiempo_en_progreso):
-    """Envía un email de alerta cuando una tarea supera su tiempo máximo en progreso"""
+    """Envía un email de alerta usando Brevo API (no SMTP porque Render bloquea puerto 587)"""
     try:
         print(f"\n[EMAIL] ===== Iniciando envío de email de alerta =====")
         print(f"[EMAIL] Destino: {email_destino}")
         print(f"[EMAIL] Tarea: {tarea_nombre}")
         print(f"[EMAIL] Proyecto: {proyecto_nombre}")
 
-        # Verificar configuración SMTP
-        if not SMTP_EMAIL or not SMTP_PASSWORD:
+        # Verificar configuración
+        if not BREVO_API_KEY or not SMTP_EMAIL:
             print("[EMAIL] ❌ ERROR: Configuración de email no disponible")
-            print(f"[EMAIL]    SMTP_SERVER: {SMTP_SERVER}")
-            print(f"[EMAIL]    SMTP_PORT: {SMTP_PORT}")
+            print(f"[EMAIL]    BREVO_API_KEY: {'configurado' if BREVO_API_KEY else 'NO CONFIGURADO'}")
             print(f"[EMAIL]    SMTP_EMAIL: {'configurado' if SMTP_EMAIL else 'NO CONFIGURADO'}")
-            print(f"[EMAIL]    SMTP_PASSWORD: {'configurado' if SMTP_PASSWORD else 'NO CONFIGURADO'}")
             return False
 
-        print(f"[EMAIL] ✓ Configuración SMTP disponible")
-        print(f"[EMAIL]    Servidor: {SMTP_SERVER}:{SMTP_PORT}")
+        print(f"[EMAIL] ✓ Configuración API disponible")
         print(f"[EMAIL]    De: {SMTP_EMAIL}")
 
-        msg = MIMEMultipart('alternative')
-        msg['Subject'] = f'⚠️ Alerta: Demora en tarea "{tarea_nombre}" - {proyecto_nombre}'
-        msg['From'] = SMTP_EMAIL
-        msg['To'] = email_destino
-
-        print(f"[EMAIL] ✓ Mensaje creado")
-
         # Crear el cuerpo del email en HTML
-        html = f"""
+        html_content = f"""
         <html>
           <head>
             <style>
@@ -1838,86 +1826,60 @@ def enviar_email_alerta(email_destino, tarea_nombre, proyecto_nombre, tarea_url,
         </html>
         """
 
-        # Crear el cuerpo del email en texto plano
-        text = f"""
-⚠️ ALERTA DE DEMORA EN TAREA ⚠️
+        # Preparar el payload para la API de Brevo
+        payload = {
+            "sender": {
+                "name": "Virtual Controller SIDN",
+                "email": SMTP_EMAIL
+            },
+            "to": [
+                {
+                    "email": email_destino,
+                    "name": email_destino.split('@')[0]
+                }
+            ],
+            "subject": f"⚠️ Alerta: Demora en tarea \"{tarea_nombre}\" - {proyecto_nombre}",
+            "htmlContent": html_content
+        }
 
-Proyecto: {proyecto_nombre}
-Tarea: {tarea_nombre}
+        print(f"[EMAIL] Enviando vía Brevo API...")
 
-Esta tarea lleva {tiempo_en_progreso} en estado "En Progreso" y ha superado el tiempo máximo configurado.
+        # Enviar usando la API de Brevo
+        response = requests.post(
+            'https://api.brevo.com/v3/smtp/email',
+            headers={
+                'accept': 'application/json',
+                'api-key': BREVO_API_KEY,
+                'content-type': 'application/json'
+            },
+            json=payload,
+            timeout=10
+        )
 
-Por favor, revisa el estado de esta tarea y toma las acciones necesarias:
-{tarea_url}
-
----
-Este es un email automático del sistema Virtual Controller SIDN.
-La alerta ha sido desactivada automáticamente. Para recibir una nueva alerta,
-reactiva la configuración desde el panel de control.
-        """
-
-        part1 = MIMEText(text, 'plain')
-        part2 = MIMEText(html, 'html')
-
-        msg.attach(part1)
-        msg.attach(part2)
-
-        print(f"[EMAIL] ✓ Contenido del mensaje adjuntado (HTML + texto plano)")
-
-        # Enviar el email usando SMTP de Brevo
-        print(f"[EMAIL] Conectando al servidor SMTP {SMTP_SERVER}:{SMTP_PORT}...")
-        try:
-            with smtplib.SMTP(SMTP_SERVER, int(SMTP_PORT), timeout=30) as server:
-                print(f"[EMAIL] ✓ Conexión establecida")
-
-                print(f"[EMAIL] Iniciando STARTTLS...")
-                server.starttls()
-                print(f"[EMAIL] ✓ STARTTLS iniciado")
-
-                print(f"[EMAIL] Autenticando con {SMTP_EMAIL}...")
-                server.login(SMTP_EMAIL, SMTP_PASSWORD)
-                print(f"[EMAIL] ✓ Autenticación exitosa")
-
-                print(f"[EMAIL] Enviando mensaje...")
-                server.send_message(msg)
-                print(f"[EMAIL] ✓ Mensaje enviado exitosamente")
-
+        if response.status_code == 201:
+            print(f"[EMAIL] ✓ Email enviado exitosamente vía Brevo API")
+            print(f"[EMAIL]    Message ID: {response.json().get('messageId', 'N/A')}")
             print(f"[EMAIL] ===== Email enviado a {email_destino} =====")
             print(f"[INFO] ✅ Email de alerta enviado para tarea '{tarea_nombre}' del proyecto '{proyecto_nombre}'")
             return True
-        except Exception as smtp_error:
-            print(f"[EMAIL] ❌ ERROR durante conexión/envío SMTP:")
-            print(f"[EMAIL]    Tipo: {type(smtp_error).__name__}")
-            print(f"[EMAIL]    Mensaje: {str(smtp_error)}")
-            import traceback
-            traceback.print_exc()
-            raise  # Re-lanzar para que sea capturado por el try/except exterior
+        else:
+            print(f"[EMAIL] ❌ Error HTTP {response.status_code}")
+            print(f"[EMAIL]    Respuesta: {response.text}")
+            return False
 
-    except smtplib.SMTPAuthenticationError as e:
-        print(f"[EMAIL] ❌ ERROR DE AUTENTICACIÓN SMTP:")
-        print(f"[EMAIL]    {str(e)}")
-        print(f"[EMAIL]    Verifica las credenciales SMTP_EMAIL y SMTP_PASSWORD en Render")
-        import traceback
-        traceback.print_exc()
+    except requests.exceptions.Timeout:
+        print(f"[EMAIL] ❌ TIMEOUT al llamar a la API de Brevo")
         return False
 
-    except smtplib.SMTPConnectError as e:
-        print(f"[EMAIL] ❌ ERROR DE CONEXIÓN SMTP:")
-        print(f"[EMAIL]    {str(e)}")
-        print(f"[EMAIL]    Verifica que el servidor {SMTP_SERVER}:{SMTP_PORT} sea accesible")
-        import traceback
-        traceback.print_exc()
-        return False
-
-    except smtplib.SMTPException as e:
-        print(f"[EMAIL] ❌ ERROR SMTP:")
+    except requests.exceptions.RequestException as e:
+        print(f"[EMAIL] ❌ ERROR DE RED:")
         print(f"[EMAIL]    {str(e)}")
         import traceback
         traceback.print_exc()
         return False
 
     except Exception as e:
-        print(f"[EMAIL] ❌ ERROR INESPERADO al enviar email:")
+        print(f"[EMAIL] ❌ ERROR INESPERADO:")
         print(f"[EMAIL]    Tipo: {type(e).__name__}")
         print(f"[EMAIL]    Mensaje: {str(e)}")
         import traceback
