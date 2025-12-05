@@ -77,7 +77,7 @@ GOOGLE_SCOPES = [
 
 # ID del Google Sheet donde se exportarán los datos
 GOOGLE_SHEET_ID = '1Q1WUv9Cteq4McQh4MPCQFdK9_9stSjMvtVFKVW2VP1c'
-SHEET_NAME = 'Informe horas proyectos'
+SHEET_NAME = 'Hoja 1'
 
 # Almacenamiento en memoria de alertas por tarea
 # Estructura: {tarea_id: {aviso_activado, email_aviso, aviso_horas, aviso_minutos, ultima_actualizacion, ultimo_envio_email}}
