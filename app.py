@@ -910,11 +910,22 @@ def check_and_send_alert(task_id, task_name, task_url, date_updated, alert_confi
         if tiempo_data['is_currently_in_progress'] and tiempo_data['current_session_start']:
             try:
                 session_start = datetime.fromisoformat(tiempo_data['current_session_start'])
-                tiempo_sesion_actual = (datetime.now() - session_start).total_seconds()
+                # Usar datetime.now() con timezone UTC para poder restar
+                from datetime import timezone
+                now = datetime.now(timezone.utc)
+                tiempo_sesion_actual = (now - session_start).total_seconds()
                 tiempo_en_progreso_segundos += tiempo_sesion_actual
                 print(f"⏱️  [CALC] Sesión actual: +{tiempo_sesion_actual/3600:.2f}h")
             except Exception as e:
                 print(f"⚠️  [WARNING] Error al calcular sesión actual: {str(e)}")
+                # Fallback: intentar sin timezone
+                try:
+                    session_start_naive = datetime.fromisoformat(tiempo_data['current_session_start'].replace('+00:00', '').replace('Z', ''))
+                    tiempo_sesion_actual = (datetime.utcnow() - session_start_naive).total_seconds()
+                    tiempo_en_progreso_segundos += tiempo_sesion_actual
+                    print(f"⏱️  [CALC] Sesión actual (fallback): +{tiempo_sesion_actual/3600:.2f}h")
+                except Exception as e2:
+                    print(f"⚠️  [ERROR] No se pudo calcular tiempo de sesión actual: {str(e2)}")
 
         horas_actuales = tiempo_en_progreso_segundos / 3600
         horas_limite = tiempo_max_segundos / 3600
@@ -1843,11 +1854,22 @@ def verificar_alertas():
                 if tiempo_data['is_currently_in_progress'] and tiempo_data['current_session_start']:
                     try:
                         session_start = datetime.fromisoformat(tiempo_data['current_session_start'])
-                        tiempo_sesion_actual = (datetime.now() - session_start).total_seconds()
+                        # Usar datetime.now() con timezone UTC para poder restar
+                        from datetime import timezone
+                        now = datetime.now(timezone.utc)
+                        tiempo_sesion_actual = (now - session_start).total_seconds()
                         tiempo_en_progreso_segundos += tiempo_sesion_actual
                         print(f"[INFO] Sumando tiempo de sesión actual: {tiempo_sesion_actual/3600:.2f}h")
                     except Exception as e:
-                        print(f"[WARNING] Error al calcular tiempo de sesión actual: {str(e)}")
+                        print(f"[WARNING] Error al calcular sesión actual: {str(e)}")
+                        # Fallback: intentar sin timezone
+                        try:
+                            session_start_naive = datetime.fromisoformat(tiempo_data['current_session_start'].replace('+00:00', '').replace('Z', ''))
+                            tiempo_sesion_actual = (datetime.utcnow() - session_start_naive).total_seconds()
+                            tiempo_en_progreso_segundos += tiempo_sesion_actual
+                            print(f"[INFO] Sesión actual (fallback): +{tiempo_sesion_actual/3600:.2f}h")
+                        except Exception as e2:
+                            print(f"[ERROR] No se pudo calcular tiempo de sesión actual: {str(e2)}")
 
                 print(f"[INFO] Tiempo en progreso: {tiempo_en_progreso_segundos/3600:.2f}h ({tiempo_en_progreso_segundos}s)")
                 print(f"[INFO] Tiempo máximo configurado: {tiempo_max_segundos/3600:.2f}h ({tiempo_max_segundos}s)")
@@ -2005,10 +2027,22 @@ def debug_verificar_alertas_ahora():
                 if tiempo_data['is_currently_in_progress'] and tiempo_data['current_session_start']:
                     try:
                         session_start = datetime.fromisoformat(tiempo_data['current_session_start'])
-                        tiempo_sesion = (datetime.now() - session_start).total_seconds()
+                        # Usar datetime.now() con timezone UTC para poder restar
+                        from datetime import timezone
+                        now = datetime.now(timezone.utc)
+                        tiempo_sesion = (now - session_start).total_seconds()
                         tiempo_en_progreso += tiempo_sesion
-                    except:
-                        pass
+                        print(f"[DEBUG] Sesión actual: +{tiempo_sesion/3600:.2f}h (desde {session_start} hasta {now})")
+                    except Exception as e:
+                        print(f"[DEBUG] Error al calcular sesión actual: {str(e)}")
+                        # Fallback: intentar sin timezone
+                        try:
+                            session_start_naive = datetime.fromisoformat(tiempo_data['current_session_start'].replace('+00:00', '').replace('Z', ''))
+                            tiempo_sesion = (datetime.utcnow() - session_start_naive).total_seconds()
+                            tiempo_en_progreso += tiempo_sesion
+                            print(f"[DEBUG] Sesión actual (fallback): +{tiempo_sesion/3600:.2f}h")
+                        except Exception as e2:
+                            print(f"[ERROR] No se pudo calcular tiempo de sesión actual: {str(e2)}")
 
                 horas_actuales = tiempo_en_progreso / 3600
                 horas_limite = tiempo_max_segundos / 3600
