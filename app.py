@@ -848,42 +848,93 @@ def process_space_event(event_type, data):
 
 
 def check_and_send_alert(task_id, task_name, task_url, date_updated, alert_config):
-    """Verifica y envía alerta si es necesario"""
+    """Verifica y envía alerta si es necesario basándose en el tiempo total en progreso"""
     try:
-        fecha_actualizacion = datetime.fromtimestamp(int(date_updated) / 1000) if date_updated else datetime.now()
-        tiempo_transcurrido = datetime.now() - fecha_actualizacion
+        print(f"[INFO] Verificando alerta para tarea {task_name} (ID: {task_id}) desde webhook")
 
-        tiempo_alerta = timedelta(
-            hours=alert_config.get('aviso_horas', 0),
-            minutes=alert_config.get('aviso_minutos', 0)
-        )
+        # Obtener configuración de la alerta
+        tiempo_max_horas = alert_config.get('aviso_horas', 0)
+        tiempo_max_minutos = alert_config.get('aviso_minutos', 0)
+        email_destino = alert_config.get('email_aviso')
 
-        if tiempo_transcurrido >= tiempo_alerta:
-            # Verificar último envío
-            ultimo_envio = alert_config.get('ultimo_envio_email')
-            if ultimo_envio:
-                # Parsear timestamp de SQLite
-                try:
-                    ultimo_envio_dt = datetime.fromisoformat(ultimo_envio.replace('Z', '+00:00'))
-                except:
-                    ultimo_envio_dt = datetime.now() - timedelta(days=2)  # Forzar envío
+        # Validar configuración
+        tiempo_max_segundos = (tiempo_max_horas * 3600) + (tiempo_max_minutos * 60)
+        if tiempo_max_segundos <= 0:
+            print(f"[WARNING] Tarea {task_id} tiene tiempo máximo de 0. Saltando...")
+            return
 
-                if datetime.now() - ultimo_envio_dt < timedelta(days=1):
-                    return  # No enviar, ya se envió hace menos de 1 día
+        if not email_destino:
+            print(f"[WARNING] Tarea {task_id} no tiene email configurado. Saltando...")
+            return
 
-            # Enviar email
-            email_destino = alert_config.get('email_aviso')
-            if email_destino:
-                horas = int(tiempo_transcurrido.total_seconds() // 3600)
-                minutos = int((tiempo_transcurrido.total_seconds() % 3600) // 60)
-                tiempo_sin_act = f"{horas} horas y {minutos} minutos"
+        # Obtener información de la tarea desde la BD
+        tarea_bd = db.get_task(task_id)
+        if not tarea_bd:
+            print(f"[WARNING] Tarea {task_id} no encontrada en BD. Saltando...")
+            return
 
-                if enviar_email_alerta(email_destino, task_name, task_url, tiempo_sin_act):
-                    db.update_alert_last_sent(task_id)
-                    print(f"[INFO] Email de alerta enviado para tarea {task_id}")
+        # Verificar si la tarea está actualmente en progreso
+        if tarea_bd['status'] != 'en_progreso':
+            print(f"[INFO] Tarea {task_id} no está en estado 'en_progreso' (estado actual: {tarea_bd['status']}). Saltando...")
+            return
+
+        # Calcular el tiempo total en progreso usando el historial de estados
+        tiempo_data = db.calculate_task_time_in_progress(task_id)
+        tiempo_en_progreso_segundos = tiempo_data['total_seconds']
+
+        # Si está actualmente en progreso, sumar el tiempo de la sesión actual
+        if tiempo_data['is_currently_in_progress'] and tiempo_data['current_session_start']:
+            try:
+                session_start = datetime.fromisoformat(tiempo_data['current_session_start'])
+                tiempo_sesion_actual = (datetime.now() - session_start).total_seconds()
+                tiempo_en_progreso_segundos += tiempo_sesion_actual
+                print(f"[INFO] Sumando tiempo de sesión actual: {tiempo_sesion_actual/3600:.2f}h")
+            except Exception as e:
+                print(f"[WARNING] Error al calcular tiempo de sesión actual: {str(e)}")
+
+        print(f"[INFO] Tiempo en progreso: {tiempo_en_progreso_segundos/3600:.2f}h ({tiempo_en_progreso_segundos}s)")
+        print(f"[INFO] Tiempo máximo configurado: {tiempo_max_segundos/3600:.2f}h ({tiempo_max_segundos}s)")
+
+        # Verificar si se superó el tiempo máximo
+        if tiempo_en_progreso_segundos >= tiempo_max_segundos:
+            print(f"[ALERT] ⚠️ ¡Tarea {task_id} ha superado el tiempo máximo!")
+
+            # Formatear el tiempo en progreso para el email
+            horas = int(tiempo_en_progreso_segundos // 3600)
+            minutos = int((tiempo_en_progreso_segundos % 3600) // 60)
+            tiempo_en_progreso_str = f"{horas} horas y {minutos} minutos"
+
+            # Obtener el nombre del proyecto
+            proyecto_nombre = db.get_task_project_name(task_id)
+
+            # Enviar email de alerta
+            print(f"[INFO] Enviando email de alerta a {email_destino}...")
+            if enviar_email_alerta(
+                email_destino,
+                task_name,
+                proyecto_nombre,
+                task_url,
+                tiempo_en_progreso_str
+            ):
+                print(f"[SUCCESS] ✓ Email enviado exitosamente desde webhook")
+
+                # Desactivar la alerta después del envío
+                db.deactivate_task_alert(task_id)
+
+                # También actualizar la caché en memoria si existe
+                if task_id in alertas_tareas:
+                    alertas_tareas[task_id]['aviso_activado'] = False
+                    alertas_tareas[task_id]['ultimo_envio_email'] = datetime.now().isoformat()
+            else:
+                print(f"[ERROR] ✗ No se pudo enviar el email desde webhook")
+        else:
+            diferencia = tiempo_max_segundos - tiempo_en_progreso_segundos
+            print(f"[INFO] Tarea aún no supera el límite. Faltan {diferencia/3600:.2f}h")
 
     except Exception as e:
         print(f"[ERROR] Error al verificar alerta para tarea {task_id}: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 @app.route('/api/webhook/tasks/cache', methods=['GET'])
 def obtener_cache_tareas():
