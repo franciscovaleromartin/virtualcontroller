@@ -642,11 +642,16 @@ def process_task_event(event_type, data, webhook_timestamp=None):
         data: Datos del webhook
         webhook_timestamp: Timestamp del webhook en formato ISO (opcional)
     """
+    print(f"\n[WEBHOOK] ===== Recibido evento: {event_type} =====")
+    print(f"[WEBHOOK] Timestamp: {datetime.now().isoformat()}")
+
     task_id = data.get('task_id')
 
     if not task_id:
-        print("[WARNING] Evento de tarea sin task_id")
+        print("[WEBHOOK] ❌ ERROR: Evento de tarea sin task_id")
         return {'status': 'error', 'message': 'task_id requerido'}
+
+    print(f"[WEBHOOK] Task ID: {task_id}")
 
     if event_type in ['taskDeleted', 'taskDeleted']:
         # Obtener list_id antes de eliminar
@@ -779,9 +784,16 @@ def process_task_event(event_type, data, webhook_timestamp=None):
     print(f"[INFO] Tarea {task_id} guardada en BD y caché: {task_name}")
 
     # Verificar alertas si está configurada
+    print(f"[WEBHOOK] Verificando si la tarea {task_id} tiene alerta configurada...")
     alert = db.get_task_alert(task_id)
     if alert and alert.get('aviso_activado'):
+        print(f"[WEBHOOK] ✓ Alerta encontrada y activa para tarea {task_id}")
         check_and_send_alert(task_id, task_name, task_url, date_updated, alert)
+    else:
+        if alert:
+            print(f"[WEBHOOK] - Alerta encontrada pero desactivada para tarea {task_id}")
+        else:
+            print(f"[WEBHOOK] - No hay alerta configurada para tarea {task_id}")
 
     return {'status': 'saved', 'task_id': task_id, 'name': task_name}
 
@@ -1766,11 +1778,26 @@ def verificar_alertas():
     try:
         print("\n" + "🔍"*40)
         print("🔍 VERIFICACIÓN PERIÓDICA DE ALERTAS INICIADA")
+        print(f"🔍 Timestamp: {datetime.now().isoformat()}")
         print("🔍"*40)
 
         # Obtener todas las alertas activas de la base de datos
         alertas_activas = db.get_all_active_alerts()
         print(f"📋 [INFO] Alertas activas encontradas: {len(alertas_activas)}")
+
+        if len(alertas_activas) == 0:
+            print("⚠️  [INFO] No hay alertas activas configuradas. Finalizando verificación.")
+            print("🔍"*40 + "\n")
+            return jsonify({
+                'success': True,
+                'alertas_enviadas': [],
+                'total_verificadas': 0,
+                'mensaje': 'No hay alertas activas configuradas'
+            })
+
+        # Mostrar información de cada alerta activa
+        for i, alerta in enumerate(alertas_activas, 1):
+            print(f"   {i}. Tarea: {alerta['task_name']} (ID: {alerta['task_id'][:8]}...) - Límite: {alerta['aviso_horas']}h {alerta['aviso_minutos']}m")
 
         alertas_enviadas = []
 
@@ -1900,6 +1927,158 @@ def verificar_alertas():
 
     except Exception as e:
         print(f"[ERROR] Error crítico en verificación de alertas: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/debug/verificar-alertas-ahora', methods=['GET', 'POST'])
+def debug_verificar_alertas_ahora():
+    """Endpoint de debug para forzar verificación inmediata de todas las alertas activas"""
+    try:
+        print("\n" + "🔧"*40)
+        print("🔧 DEBUG: VERIFICACIÓN MANUAL DE ALERTAS FORZADA")
+        print(f"🔧 Timestamp: {datetime.now().isoformat()}")
+        print("🔧"*40)
+
+        # Obtener todas las alertas activas
+        alertas_activas = db.get_all_active_alerts()
+        print(f"📋 [DEBUG] Total de alertas activas en BD: {len(alertas_activas)}")
+
+        if len(alertas_activas) == 0:
+            msg = "No hay alertas activas configuradas en la base de datos"
+            print(f"⚠️  [DEBUG] {msg}")
+            print("🔧"*40 + "\n")
+            return jsonify({
+                'success': True,
+                'mensaje': msg,
+                'alertas_activas': 0,
+                'alertas_verificadas': 0,
+                'alertas_enviadas': []
+            })
+
+        # Mostrar detalles de cada alerta
+        print("\n📋 [DEBUG] Detalles de alertas activas:")
+        for i, alerta in enumerate(alertas_activas, 1):
+            print(f"   {i}. ID: {alerta['task_id'][:12]}...")
+            print(f"      Tarea: {alerta['task_name']}")
+            print(f"      Email: {alerta['email_aviso']}")
+            print(f"      Límite: {alerta['aviso_horas']}h {alerta['aviso_minutos']}m")
+
+        # Verificar cada alerta
+        alertas_enviadas = []
+        alertas_dentro_limite = []
+        alertas_no_en_progreso = []
+        alertas_error = []
+
+        for alerta in alertas_activas:
+            tarea_id = alerta['task_id']
+            tarea_nombre = alerta['task_name']
+
+            try:
+                print(f"\n[DEBUG] ──── Procesando: {tarea_nombre} ────")
+
+                # Obtener tarea de BD
+                tarea_bd = db.get_task(tarea_id)
+                if not tarea_bd:
+                    print(f"⚠️  [DEBUG] Tarea no encontrada en BD")
+                    alertas_error.append({
+                        'tarea': tarea_nombre,
+                        'error': 'Tarea no encontrada en BD'
+                    })
+                    continue
+
+                estado = tarea_bd['status']
+                print(f"[DEBUG] Estado actual: {estado}")
+
+                if estado != 'en_progreso':
+                    print(f"ℹ️  [DEBUG] No está en progreso, saltando")
+                    alertas_no_en_progreso.append(tarea_nombre)
+                    continue
+
+                # Calcular tiempo
+                tiempo_max_segundos = (alerta['aviso_horas'] * 3600) + (alerta['aviso_minutos'] * 60)
+                tiempo_data = db.calculate_task_time_in_progress(tarea_id)
+                tiempo_en_progreso = tiempo_data['total_seconds']
+
+                # Sumar sesión actual si aplica
+                if tiempo_data['is_currently_in_progress'] and tiempo_data['current_session_start']:
+                    try:
+                        session_start = datetime.fromisoformat(tiempo_data['current_session_start'])
+                        tiempo_sesion = (datetime.now() - session_start).total_seconds()
+                        tiempo_en_progreso += tiempo_sesion
+                    except:
+                        pass
+
+                horas_actuales = tiempo_en_progreso / 3600
+                horas_limite = tiempo_max_segundos / 3600
+
+                print(f"[DEBUG] Tiempo en progreso: {horas_actuales:.2f}h")
+                print(f"[DEBUG] Límite configurado: {horas_limite:.2f}h")
+
+                if tiempo_en_progreso >= tiempo_max_segundos:
+                    print(f"🚨 [DEBUG] ¡LÍMITE SUPERADO! Preparando envío...")
+
+                    horas = int(tiempo_en_progreso // 3600)
+                    minutos = int((tiempo_en_progreso % 3600) // 60)
+                    tiempo_str = f"{horas} horas y {minutos} minutos"
+
+                    proyecto_nombre = db.get_task_project_name(tarea_id)
+                    tarea_url = alerta['task_url']
+
+                    # Intentar enviar email
+                    if enviar_email_alerta(alerta['email_aviso'], tarea_nombre, proyecto_nombre, tarea_url, tiempo_str):
+                        print(f"✅ [DEBUG] Email enviado exitosamente")
+                        db.deactivate_task_alert(tarea_id)
+                        alertas_enviadas.append({
+                            'tarea': tarea_nombre,
+                            'email': alerta['email_aviso'],
+                            'tiempo': tiempo_str
+                        })
+                    else:
+                        print(f"❌ [DEBUG] Error al enviar email")
+                        alertas_error.append({
+                            'tarea': tarea_nombre,
+                            'error': 'Error al enviar email (ver logs SMTP anteriores)'
+                        })
+                else:
+                    diferencia = (tiempo_max_segundos - tiempo_en_progreso) / 3600
+                    print(f"✓ [DEBUG] Dentro del límite (faltan {diferencia:.2f}h)")
+                    alertas_dentro_limite.append({
+                        'tarea': tarea_nombre,
+                        'tiempo_actual': f"{horas_actuales:.2f}h",
+                        'limite': f"{horas_limite:.2f}h",
+                        'restante': f"{diferencia:.2f}h"
+                    })
+
+            except Exception as e:
+                print(f"❌ [DEBUG] Error procesando tarea {tarea_nombre}: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                alertas_error.append({
+                    'tarea': tarea_nombre,
+                    'error': str(e)
+                })
+
+        print("\n🔧"*40)
+        print("🔧 DEBUG: VERIFICACIÓN COMPLETADA")
+        print(f"🔧 Alertas enviadas: {len(alertas_enviadas)}")
+        print(f"🔧 Dentro del límite: {len(alertas_dentro_limite)}")
+        print(f"🔧 No en progreso: {len(alertas_no_en_progreso)}")
+        print(f"🔧 Errores: {len(alertas_error)}")
+        print("🔧"*40 + "\n")
+
+        return jsonify({
+            'success': True,
+            'alertas_activas': len(alertas_activas),
+            'alertas_enviadas': alertas_enviadas,
+            'alertas_dentro_limite': alertas_dentro_limite,
+            'alertas_no_en_progreso': alertas_no_en_progreso,
+            'alertas_error': alertas_error
+        })
+
+    except Exception as e:
+        print(f"❌ [DEBUG] Error crítico: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
