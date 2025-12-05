@@ -550,6 +550,13 @@
                     <input type="date" id="fecha-fin" required>
                 </div>
 
+                <!-- Área de resultado de exportación -->
+                <div id="export-result" class="hidden" style="margin: 15px 0; padding: 15px; background: #e8f5e9; border-radius: 8px; border: 2px solid #4caf50;">
+                    <p style="margin: 0 0 10px 0; color: #2e7d32; font-weight: 600;">✓ Informe exportado exitosamente</p>
+                    <p style="margin: 0 0 8px 0; color: #666; font-size: 14px;">Se exportaron <span id="filas-exportadas">0</span> filas.</p>
+                    <a id="sheet-link" href="#" target="_blank" style="display: inline-block; padding: 8px 16px; background: #4285f4; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">📊 Ver Informe en Google Sheets</a>
+                </div>
+
                 <div class="modal-buttons">
                     <button type="button" class="btn btn-secondary" onclick="cerrarModalImportar()">Cancelar</button>
                     <button type="button" class="btn btn-primary" id="btn-exportar" onclick="exportarAGoogleSheets()" disabled>Importar Informe</button>
@@ -1239,7 +1246,9 @@
         // Cerrar modal de importar informe
         function cerrarModalImportar() {
             const modal = document.getElementById('importar-modal');
+            const exportResult = document.getElementById('export-result');
             modal.style.display = 'none';
+            exportResult.classList.add('hidden');
         }
 
         // Cerrar modal al hacer click fuera
@@ -1349,8 +1358,11 @@
             }
 
             const btnExportar = document.getElementById('btn-exportar');
+            const exportResult = document.getElementById('export-result');
+
             btnExportar.disabled = true;
             btnExportar.textContent = 'Exportando...';
+            exportResult.classList.add('hidden');
 
             try {
                 const response = await fetch('/api/export-to-google-sheets', {
@@ -1367,8 +1379,13 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    alert(`¡Informe exportado exitosamente!\n\nSe exportaron ${data.filas_escritas} filas.\n\nPuedes ver el informe en:\n${data.url}`);
-                    cerrarModalImportar();
+                    // Mostrar resultado en el modal
+                    document.getElementById('filas-exportadas').textContent = data.filas_escritas;
+                    document.getElementById('sheet-link').href = data.url;
+                    exportResult.classList.remove('hidden');
+
+                    // Scroll al resultado
+                    exportResult.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 } else {
                     alert(`Error al exportar: ${data.error || 'Error desconocido'}`);
                 }
