@@ -2615,10 +2615,10 @@ def export_to_google_sheets():
         if not fecha_inicio or not fecha_fin:
             return jsonify({'error': 'Faltan las fechas de inicio y fin'}), 400
 
-        # Convertir fechas a datetime
-        fecha_inicio_dt = datetime.strptime(fecha_inicio, '%Y-%m-%d')
-        fecha_fin_dt = datetime.strptime(fecha_fin, '%Y-%m-%d')
-        fecha_fin_dt = fecha_fin_dt.replace(hour=23, minute=59, second=59)
+        # Convertir fechas a datetime con timezone UTC
+        from datetime import timezone
+        fecha_inicio_dt = datetime.strptime(fecha_inicio, '%Y-%m-%d').replace(hour=0, minute=0, second=0, tzinfo=timezone.utc)
+        fecha_fin_dt = datetime.strptime(fecha_fin, '%Y-%m-%d').replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
 
         print(f"[INFO] Exportando informe desde {fecha_inicio} hasta {fecha_fin}")
 
@@ -2816,10 +2816,18 @@ def calcular_horas_proyecto(project_type, project_id, fecha_inicio, fecha_fin):
                 try:
                     # Parsear timestamp
                     timestamp = datetime.fromisoformat(cambio['changed_at'].replace('Z', '+00:00'))
+                    # Si el timestamp no tiene timezone, añadirle UTC
+                    if timestamp.tzinfo is None:
+                        from datetime import timezone
+                        timestamp = timestamp.replace(tzinfo=timezone.utc)
                 except:
                     # Si falla el parseo, intentar sin timezone
                     try:
                         timestamp = datetime.fromisoformat(cambio['changed_at'])
+                        # Añadir timezone UTC si no tiene
+                        if timestamp.tzinfo is None:
+                            from datetime import timezone
+                            timestamp = timestamp.replace(tzinfo=timezone.utc)
                     except:
                         print(f"[WARNING] No se pudo parsear fecha '{cambio['changed_at']}' para tarea {tarea['name']}")
                         continue
@@ -2848,11 +2856,8 @@ def calcular_horas_proyecto(project_type, project_id, fecha_inicio, fecha_fin):
             # Si la tarea sigue en progreso (no hubo cambio de estado después)
             if in_progress_start is not None and tarea['status'] == 'en_progreso':
                 # Usar la fecha actual como fin, pero limitado a fecha_fin
-                ahora = datetime.now()
-                # Asegurar que ahora tenga timezone info si fecha_fin la tiene
-                if fecha_fin.tzinfo is not None and ahora.tzinfo is None:
-                    import pytz
-                    ahora = ahora.replace(tzinfo=pytz.UTC)
+                from datetime import timezone
+                ahora = datetime.now(timezone.utc)
 
                 fin_progreso = min(ahora, fecha_fin)
 
