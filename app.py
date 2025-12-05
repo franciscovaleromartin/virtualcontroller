@@ -15,6 +15,9 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from urllib.parse import quote
 import db  # Importar módulo de base de datos
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+import atexit
 
 print(f"[STARTUP] Imports completados exitosamente", flush=True)
 
@@ -64,6 +67,110 @@ alertas_config = {}
 # Caché de tareas actualizado vía webhook
 # Estructura: {tarea_id: {datos_tarea, timestamp_actualizacion}}
 tareas_cache = {}
+
+# ============================================================================
+# SCHEDULER DE BACKEND PARA VERIFICACIÓN AUTOMÁTICA DE ALERTAS
+# ============================================================================
+
+def verificar_alertas_automaticamente():
+    """
+    Función ejecutada por el scheduler de backend cada 5 minutos.
+    Verifica todas las alertas activas independientemente del frontend.
+    """
+    with app.app_context():
+        try:
+            print("\n" + "⏰"*40)
+            print("⏰ SCHEDULER BACKEND: Verificación automática de alertas")
+            print(f"⏰ Timestamp: {datetime.now().isoformat()}")
+            print("⏰"*40)
+
+            # Obtener todas las alertas activas
+            alertas_activas = db.get_all_active_alerts()
+            print(f"📋 [SCHEDULER] Alertas activas encontradas: {len(alertas_activas)}")
+
+            if len(alertas_activas) == 0:
+                print("⏰ [SCHEDULER] No hay alertas activas. Esperando próxima ejecución...")
+                print("⏰"*40 + "\n")
+                return
+
+            alertas_enviadas = 0
+
+            for alerta in alertas_activas:
+                tarea_id = alerta['task_id']
+                tarea_nombre = alerta['task_name']
+
+                try:
+                    # Obtener tarea de BD
+                    tarea_bd = db.get_task(tarea_id)
+                    if not tarea_bd or tarea_bd['status'] != 'en_progreso':
+                        continue
+
+                    # Calcular tiempo
+                    tiempo_max_segundos = (alerta['aviso_horas'] * 3600) + (alerta['aviso_minutos'] * 60)
+                    tiempo_data = db.calculate_task_time_in_progress(tarea_id)
+                    tiempo_en_progreso = tiempo_data['total_seconds']
+
+                    # Sumar sesión actual si aplica
+                    if tiempo_data['is_currently_in_progress'] and tiempo_data['current_session_start']:
+                        try:
+                            session_start = datetime.fromisoformat(tiempo_data['current_session_start'])
+                            from datetime import timezone
+                            now = datetime.now(timezone.utc)
+                            tiempo_sesion = (now - session_start).total_seconds()
+                            tiempo_en_progreso += tiempo_sesion
+                        except:
+                            pass
+
+                    # Verificar si superó el límite (con margen de 30s)
+                    MARGEN_TOLERANCIA = 30
+                    if tiempo_en_progreso >= (tiempo_max_segundos - MARGEN_TOLERANCIA):
+                        print(f"🚨 [SCHEDULER] Alerta activada para tarea: {tarea_nombre}")
+
+                        horas = int(tiempo_en_progreso // 3600)
+                        minutos = int((tiempo_en_progreso % 3600) // 60)
+                        tiempo_str = f"{horas} horas y {minutos} minutos"
+
+                        proyecto_nombre = db.get_task_project_name(tarea_id)
+                        tarea_url = alerta['task_url']
+
+                        # Enviar email
+                        if enviar_email_alerta(alerta['email_aviso'], tarea_nombre, proyecto_nombre, tarea_url, tiempo_str):
+                            print(f"✅ [SCHEDULER] Email enviado para: {tarea_nombre}")
+                            db.deactivate_task_alert(tarea_id)
+                            alertas_enviadas += 1
+                        else:
+                            print(f"❌ [SCHEDULER] Error al enviar email para: {tarea_nombre}")
+
+                except Exception as e:
+                    print(f"❌ [SCHEDULER] Error procesando {tarea_nombre}: {str(e)}")
+
+            print("⏰"*40)
+            print(f"⏰ SCHEDULER: Verificación completada - {alertas_enviadas} alertas enviadas")
+            print("⏰"*40 + "\n")
+
+        except Exception as e:
+            print(f"❌ [SCHEDULER] Error crítico: {str(e)}")
+            import traceback
+            traceback.print_exc()
+
+# Configurar scheduler de backend
+scheduler = BackgroundScheduler()
+scheduler.add_job(
+    func=verificar_alertas_automaticamente,
+    trigger=IntervalTrigger(minutes=5),  # Ejecutar cada 5 minutos
+    id='verificar_alertas_job',
+    name='Verificar alertas de tareas automáticamente',
+    replace_existing=True
+)
+
+# Iniciar scheduler
+scheduler.start()
+print("[STARTUP] ✓ Scheduler de backend iniciado (verificación cada 5 minutos)", flush=True)
+
+# Asegurar que el scheduler se detenga al cerrar la app
+atexit.register(lambda: scheduler.shutdown())
+
+# ============================================================================
 
 @app.route('/health')
 def health():
@@ -932,8 +1039,9 @@ def check_and_send_alert(task_id, task_name, task_url, date_updated, alert_confi
         print(f"⏱️  [CALC] Tiempo en progreso: {horas_actuales:.2f}h")
         print(f"⏱️  [CALC] Límite configurado: {horas_limite:.2f}h")
 
-        # Verificar si se superó el tiempo máximo
-        if tiempo_en_progreso_segundos >= tiempo_max_segundos:
+        # Verificar si se superó el tiempo máximo (con margen de 30 segundos de tolerancia)
+        MARGEN_TOLERANCIA = 30  # segundos
+        if tiempo_en_progreso_segundos >= (tiempo_max_segundos - MARGEN_TOLERANCIA):
             print("\n" + "🚨"*20)
             print("🚨 ¡ALERTA ACTIVADA! - TIEMPO LÍMITE SUPERADO")
             print("🚨"*20)
@@ -1874,8 +1982,9 @@ def verificar_alertas():
                 print(f"[INFO] Tiempo en progreso: {tiempo_en_progreso_segundos/3600:.2f}h ({tiempo_en_progreso_segundos}s)")
                 print(f"[INFO] Tiempo máximo configurado: {tiempo_max_segundos/3600:.2f}h ({tiempo_max_segundos}s)")
 
-                # Verificar si se superó el tiempo máximo
-                if tiempo_en_progreso_segundos >= tiempo_max_segundos:
+                # Verificar si se superó el tiempo máximo (con margen de 30 segundos de tolerancia)
+                MARGEN_TOLERANCIA = 30  # segundos
+                if tiempo_en_progreso_segundos >= (tiempo_max_segundos - MARGEN_TOLERANCIA):
                     print("\n" + "🚨"*20)
                     print("🚨 ¡ALERTA ACTIVADA! - TIEMPO LÍMITE SUPERADO")
                     print("🚨"*20)
@@ -2050,7 +2159,9 @@ def debug_verificar_alertas_ahora():
                 print(f"[DEBUG] Tiempo en progreso: {horas_actuales:.2f}h")
                 print(f"[DEBUG] Límite configurado: {horas_limite:.2f}h")
 
-                if tiempo_en_progreso >= tiempo_max_segundos:
+                # Verificar si se superó el tiempo máximo (con margen de 30 segundos de tolerancia)
+                MARGEN_TOLERANCIA = 30  # segundos
+                if tiempo_en_progreso >= (tiempo_max_segundos - MARGEN_TOLERANCIA):
                     print(f"🚨 [DEBUG] ¡LÍMITE SUPERADO! Preparando envío...")
 
                     horas = int(tiempo_en_progreso // 3600)
