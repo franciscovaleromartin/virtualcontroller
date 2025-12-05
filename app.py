@@ -2679,10 +2679,16 @@ def export_to_google_sheets():
         print(f"[INFO] Preparando valores para {len(proyectos_con_horas)} proyectos...")
 
         for proyecto in proyectos_con_horas:
+            # Convertir horas decimales a formato "Xh Ym"
+            total_horas = proyecto['horas']
+            horas_enteras = int(total_horas)
+            minutos = int((total_horas - horas_enteras) * 60)
+            tiempo_formateado = f"{horas_enteras}h {minutos}m"
+
             fila = [
                 fecha_reporte,
                 proyecto['nombre'],
-                f"{proyecto['horas']:.2f}"
+                tiempo_formateado
             ]
             valores.append(fila)
             print(f"[INFO] Añadida fila: {fila}")
