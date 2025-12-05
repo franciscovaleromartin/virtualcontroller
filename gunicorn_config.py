@@ -29,12 +29,80 @@ keepalive = 5
 # Bind to all interfaces with the PORT from environment
 bind = f"0.0.0.0:{port}"
 
-# Logging
-accesslog = '-'
-errorlog = '-'
+# Logging personalizado para silenciar health checks
+import logging
+
+class HealthCheckFilter(logging.Filter):
+    """Filtro para silenciar health checks de Render"""
+    def filter(self, record):
+        # Obtener el mensaje del log
+        message = record.getMessage()
+        # Silenciar requests a /health, /healthz, /api/health
+        health_endpoints = ['/health ', '/healthz ', '/api/health ']
+        return not any(endpoint in message for endpoint in health_endpoints)
+
+# Configuración de logs
+accesslog = '-'  # stdout
+errorlog = '-'   # stderr
 loglevel = 'info'
 capture_output = True
 enable_stdio_inheritance = True
+
+# Aplicar filtro personalizado
+logconfig_dict = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'filters': {
+        'health_check_filter': {
+            '()': HealthCheckFilter,
+        }
+    },
+    'formatters': {
+        'generic': {
+            'format': '%(asctime)s [%(process)d] [%(levelname)s] %(message)s',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+            'class': 'logging.Formatter'
+        },
+        'access': {
+            'format': '%(message)s',
+            'class': 'logging.Formatter'
+        }
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'generic',
+            'stream': 'ext://sys.stdout'
+        },
+        'access_console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'access',
+            'filters': ['health_check_filter'],
+            'stream': 'ext://sys.stdout'
+        },
+        'error_console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'generic',
+            'stream': 'ext://sys.stderr'
+        }
+    },
+    'loggers': {
+        'gunicorn.error': {
+            'handlers': ['error_console'],
+            'level': 'INFO',
+            'propagate': False
+        },
+        'gunicorn.access': {
+            'handlers': ['access_console'],
+            'level': 'INFO',
+            'propagate': False
+        }
+    },
+    'root': {
+        'level': 'INFO',
+        'handlers': ['console']
+    }
+}
 
 # Preload app desactivado para evitar timeouts en deploy
 preload_app = False
