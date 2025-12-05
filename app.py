@@ -1769,30 +1769,13 @@ def obtener_alerta_tarea_endpoint(tarea_id):
 
 def enviar_email_alerta(email_destino, tarea_nombre, proyecto_nombre, tarea_url, tiempo_en_progreso):
     """Envía un email de alerta usando Brevo API (no SMTP porque Render bloquea puerto 587)"""
-    # Log ANTES del try/catch para asegurar que se ve
-    print("\n" + "="*80)
-    print("📧 FUNCIÓN enviar_email_alerta() LLAMADA")
-    print("="*80)
-
     try:
-        print(f"\n[EMAIL] ===== Iniciando envío de email de alerta =====")
-        print(f"[EMAIL] Destino: {email_destino}")
-        print(f"[EMAIL] Tarea: {tarea_nombre}")
-        print(f"[EMAIL] Proyecto: {proyecto_nombre}")
-
-        # Flush para forzar que los logs aparezcan inmediatamente
-        import sys
-        sys.stdout.flush()
-
         # Verificar configuración
         if not BREVO_API_KEY or not SMTP_EMAIL:
-            print("[EMAIL] ❌ ERROR: Configuración de email no disponible")
-            print(f"[EMAIL]    BREVO_API_KEY: {'configurado' if BREVO_API_KEY else 'NO CONFIGURADO'}")
-            print(f"[EMAIL]    SMTP_EMAIL: {'configurado' if SMTP_EMAIL else 'NO CONFIGURADO'}")
+            print(f"[EMAIL] ❌ Error: Configuración incompleta (BREVO_API_KEY o SMTP_EMAIL faltante)")
             return False
 
-        print(f"[EMAIL] ✓ Configuración API disponible")
-        print(f"[EMAIL]    De: {SMTP_EMAIL}")
+        print(f"[EMAIL] Enviando alerta para '{tarea_nombre}' a {email_destino}...")
 
         # Crear el cuerpo del email en HTML
         html_content = f"""
@@ -1866,33 +1849,18 @@ def enviar_email_alerta(email_destino, tarea_nombre, proyecto_nombre, tarea_url,
         )
 
         if response.status_code == 201:
-            print(f"[EMAIL] ✓ Email enviado exitosamente vía Brevo API")
-            print(f"[EMAIL]    Message ID: {response.json().get('messageId', 'N/A')}")
-            print(f"[EMAIL] ===== Email enviado a {email_destino} =====")
-            print(f"[INFO] ✅ Email de alerta enviado para tarea '{tarea_nombre}' del proyecto '{proyecto_nombre}'")
+            print(f"[EMAIL] ✅ Email enviado exitosamente a {email_destino}")
             return True
         else:
-            print(f"[EMAIL] ❌ Error HTTP {response.status_code}")
-            print(f"[EMAIL]    Respuesta: {response.text}")
+            print(f"[EMAIL] ❌ Error HTTP {response.status_code}: {response.text}")
             return False
 
     except requests.exceptions.Timeout:
-        print(f"[EMAIL] ❌ TIMEOUT al llamar a la API de Brevo")
-        return False
-
-    except requests.exceptions.RequestException as e:
-        print(f"[EMAIL] ❌ ERROR DE RED:")
-        print(f"[EMAIL]    {str(e)}")
-        import traceback
-        traceback.print_exc()
+        print(f"[EMAIL] ❌ Timeout al conectar con Brevo API")
         return False
 
     except Exception as e:
-        print(f"[EMAIL] ❌ ERROR INESPERADO:")
-        print(f"[EMAIL]    Tipo: {type(e).__name__}")
-        print(f"[EMAIL]    Mensaje: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        print(f"[EMAIL] ❌ Error: {str(e)}")
         return False
 
 @app.route('/api/verificar-alertas', methods=['POST'])
@@ -2071,19 +2039,14 @@ def verificar_alertas():
 def debug_verificar_alertas_ahora():
     """Endpoint de debug para forzar verificación inmediata de todas las alertas activas"""
     try:
-        print("\n" + "🔧"*40)
-        print("🔧 DEBUG: VERIFICACIÓN MANUAL DE ALERTAS FORZADA")
-        print(f"🔧 Timestamp: {datetime.now().isoformat()}")
-        print("🔧"*40)
+        print(f"\n[DEBUG] Verificación manual forzada - {datetime.now().isoformat()}")
 
         # Obtener todas las alertas activas
         alertas_activas = db.get_all_active_alerts()
-        print(f"📋 [DEBUG] Total de alertas activas en BD: {len(alertas_activas)}")
+        print(f"[DEBUG] Alertas activas: {len(alertas_activas)}")
 
         if len(alertas_activas) == 0:
-            msg = "No hay alertas activas configuradas en la base de datos"
-            print(f"⚠️  [DEBUG] {msg}")
-            print("🔧"*40 + "\n")
+            msg = "No hay alertas activas configuradas"
             return jsonify({
                 'success': True,
                 'mensaje': msg,
@@ -2140,34 +2103,19 @@ def debug_verificar_alertas_ahora():
                 if tiempo_data['is_currently_in_progress'] and tiempo_data['current_session_start']:
                     try:
                         session_start = datetime.fromisoformat(tiempo_data['current_session_start'])
-                        # Usar datetime.now() con timezone UTC para poder restar
                         from datetime import timezone
                         now = datetime.now(timezone.utc)
                         tiempo_sesion = (now - session_start).total_seconds()
                         tiempo_en_progreso += tiempo_sesion
-                        print(f"[DEBUG] Sesión actual: +{tiempo_sesion/3600:.2f}h (desde {session_start} hasta {now})")
                     except Exception as e:
-                        print(f"[DEBUG] Error al calcular sesión actual: {str(e)}")
-                        # Fallback: intentar sin timezone
-                        try:
-                            session_start_naive = datetime.fromisoformat(tiempo_data['current_session_start'].replace('+00:00', '').replace('Z', ''))
-                            tiempo_sesion = (datetime.utcnow() - session_start_naive).total_seconds()
-                            tiempo_en_progreso += tiempo_sesion
-                            print(f"[DEBUG] Sesión actual (fallback): +{tiempo_sesion/3600:.2f}h")
-                        except Exception as e2:
-                            print(f"[ERROR] No se pudo calcular tiempo de sesión actual: {str(e2)}")
+                        print(f"[ERROR] No se pudo calcular tiempo de sesión actual: {str(e)}")
 
                 horas_actuales = tiempo_en_progreso / 3600
                 horas_limite = tiempo_max_segundos / 3600
 
-                print(f"[DEBUG] Tiempo en progreso: {horas_actuales:.2f}h")
-                print(f"[DEBUG] Límite configurado: {horas_limite:.2f}h")
-
                 # Verificar si se superó el tiempo máximo (con margen de 30 segundos de tolerancia)
                 MARGEN_TOLERANCIA = 30  # segundos
                 if tiempo_en_progreso >= (tiempo_max_segundos - MARGEN_TOLERANCIA):
-                    print(f"🚨 [DEBUG] ¡LÍMITE SUPERADO! Preparando envío...")
-
                     horas = int(tiempo_en_progreso // 3600)
                     minutos = int((tiempo_en_progreso % 3600) // 60)
                     tiempo_str = f"{horas} horas y {minutos} minutos"
@@ -2177,7 +2125,6 @@ def debug_verificar_alertas_ahora():
 
                     # Intentar enviar email
                     if enviar_email_alerta(alerta['email_aviso'], tarea_nombre, proyecto_nombre, tarea_url, tiempo_str):
-                        print(f"✅ [DEBUG] Email enviado exitosamente")
                         db.deactivate_task_alert(tarea_id)
                         alertas_enviadas.append({
                             'tarea': tarea_nombre,
@@ -2185,18 +2132,12 @@ def debug_verificar_alertas_ahora():
                             'tiempo': tiempo_str
                         })
                     else:
-                        print(f"❌ [DEBUG] Error al enviar email")
-                        print(f"❌ [DEBUG] IMPORTANTE: Verifica en los logs de Render que:")
-                        print(f"❌ [DEBUG]   1. BREVO_API_KEY está configurado")
-                        print(f"❌ [DEBUG]   2. SMTP_EMAIL está configurado")
-                        print(f"❌ [DEBUG]   3. El servicio se reinició después de configurar las variables")
                         alertas_error.append({
                             'tarea': tarea_nombre,
-                            'error': 'Error al enviar email via Brevo API (ver logs detallados arriba)'
+                            'error': 'Error al enviar email via Brevo API'
                         })
                 else:
                     diferencia = (tiempo_max_segundos - tiempo_en_progreso) / 3600
-                    print(f"✓ [DEBUG] Dentro del límite (faltan {diferencia:.2f}h)")
                     alertas_dentro_limite.append({
                         'tarea': tarea_nombre,
                         'tiempo_actual': f"{horas_actuales:.2f}h",
@@ -2213,13 +2154,7 @@ def debug_verificar_alertas_ahora():
                     'error': str(e)
                 })
 
-        print("\n🔧"*40)
-        print("🔧 DEBUG: VERIFICACIÓN COMPLETADA")
-        print(f"🔧 Alertas enviadas: {len(alertas_enviadas)}")
-        print(f"🔧 Dentro del límite: {len(alertas_dentro_limite)}")
-        print(f"🔧 No en progreso: {len(alertas_no_en_progreso)}")
-        print(f"🔧 Errores: {len(alertas_error)}")
-        print("🔧"*40 + "\n")
+        print(f"\n[DEBUG] Verificación completada: {len(alertas_enviadas)} enviadas, {len(alertas_error)} errores")
 
         return jsonify({
             'success': True,
@@ -2247,17 +2182,13 @@ def test_email():
         if not email_destino:
             return jsonify({'error': 'Se requiere un email de destino'}), 400
 
-        print(f"[INFO] Probando envío de email a: {email_destino}")
-
-        # Verificar configuración SMTP
-        if not SMTP_EMAIL or not SMTP_PASSWORD:
+        # Verificar configuración Brevo API
+        if not SMTP_EMAIL or not BREVO_API_KEY:
             return jsonify({
-                'error': 'Configuración SMTP no disponible',
+                'error': 'Configuración de email no disponible',
                 'details': {
-                    'SMTP_SERVER': SMTP_SERVER,
-                    'SMTP_PORT': SMTP_PORT,
                     'SMTP_EMAIL': 'configurado' if SMTP_EMAIL else 'NO CONFIGURADO',
-                    'SMTP_PASSWORD': 'configurado' if SMTP_PASSWORD else 'NO CONFIGURADO'
+                    'BREVO_API_KEY': 'configurado' if BREVO_API_KEY else 'NO CONFIGURADO'
                 }
             }), 500
 
@@ -2274,10 +2205,9 @@ def test_email():
             return jsonify({
                 'success': True,
                 'message': f'Email de prueba enviado exitosamente a {email_destino}',
-                'smtp_config': {
-                    'server': SMTP_SERVER,
-                    'port': SMTP_PORT,
-                    'email': SMTP_EMAIL
+                'email_config': {
+                    'from': SMTP_EMAIL,
+                    'service': 'Brevo API'
                 }
             })
         else:
