@@ -1242,22 +1242,22 @@ def get_spaces():
         headers = get_headers()
         if not headers:
             return jsonify({'error': 'No autenticado', 'redirect': '/login'}), 401
-        
+
         teams_response = requests.get('https://api.clickup.com/api/v2/team', headers=headers, timeout=10)
 
         if teams_response.status_code == 401:
             session.clear()
             return jsonify({'error': 'Sesión expirada', 'redirect': '/login'}), 401
-        
+
         if teams_response.status_code != 200:
             return jsonify({
                 'error': 'Error al conectar con ClickUp',
                 'details': teams_response.text,
                 'status': teams_response.status_code
             }), 400
-        
+
         teams = teams_response.json()['teams']
-        
+
         all_spaces = []
         for team in teams:
             spaces_response = requests.get(
@@ -1268,12 +1268,17 @@ def get_spaces():
             if spaces_response.status_code == 200:
                 spaces = spaces_response.json()['spaces']
                 for space in spaces:
-                    all_spaces.append({
+                    space_data = {
                         'id': space['id'],
                         'name': space['name'],
                         'team_id': team['id']
-                    })
-        
+                    }
+                    all_spaces.append(space_data)
+
+                    # Guardar el espacio en la base de datos
+                    db.save_space(space['id'], space['name'], team['id'], metadata=space)
+                    print(f"[INFO] Espacio {space['id']} guardado en BD: {space['name']}")
+
         return jsonify({'spaces': all_spaces})
     
     except Exception as e:
