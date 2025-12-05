@@ -41,7 +41,12 @@
             flex: 1;
         }
 
-        .btn-refresh {
+        .header-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-refresh, .btn-import {
             background: rgba(255, 255, 255, 0.2);
             color: white;
             border: 2px solid white;
@@ -54,7 +59,7 @@
             white-space: nowrap;
         }
 
-        .btn-refresh:hover {
+        .btn-refresh:hover, .btn-import:hover {
             background: white;
             color: #ff6b35;
         }
@@ -339,6 +344,70 @@
             display: none;
         }
 
+        /* Estilos para el modal de importar informe */
+        .form-group input[type="date"] {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .google-auth-section {
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .google-auth-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .status-indicator.connected {
+            background-color: #4caf50;
+        }
+
+        .status-indicator.disconnected {
+            background-color: #ff5722;
+        }
+
+        .btn-google {
+            background: #4285f4;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-google:hover {
+            background: #357ae8;
+        }
+
+        .btn-google:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+
         @media (max-width: 768px) {
             .content {
                 padding: 20px;
@@ -367,7 +436,10 @@
                 <h1>Virtual Controller SIDN</h1>
                 <div class="subtitle">Sistema de monitoreo y alertas para ClickUp</div>
             </div>
-            <button class="btn-refresh" onclick="refrescarPagina()">🔄 Refrescar</button>
+            <div class="header-buttons">
+                <button class="btn-refresh" onclick="refrescarPagina()">🔄 Refrescar</button>
+                <button class="btn-import" onclick="abrirModalImportar()">📊 Importar Informe</button>
+            </div>
         </header>
 
         <div class="content">
@@ -436,6 +508,51 @@
                 <div class="modal-buttons">
                     <button type="button" class="btn btn-secondary" onclick="desactivarAlerta()">Desactivar</button>
                     <button type="button" class="btn btn-primary" onclick="activarAlerta()">Activar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal para importar informe a Google Sheets -->
+    <div id="importar-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Importar Informe a Google Sheets</h2>
+                <p style="color: #666; margin-top: 5px;">Exporta el informe de horas de proyectos</p>
+            </div>
+
+            <!-- Sección de autenticación con Google -->
+            <div class="google-auth-section">
+                <div class="google-auth-status">
+                    <span class="status-indicator disconnected" id="google-status-indicator"></span>
+                    <span id="google-status-text">No conectado a Google</span>
+                </div>
+                <button type="button" class="btn-google" id="btn-google-login" onclick="iniciarLoginGoogle()">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M17.64 9.2C17.64 8.46 17.58 7.92 17.45 7.36H9V10.7H13.96C13.86 11.53 13.32 12.78 12.12 13.62L12.11 13.73L14.78 15.79L14.96 15.81C16.66 14.25 17.64 11.94 17.64 9.2Z" fill="#4285F4"/>
+                        <path d="M9 18C11.43 18 13.47 17.19 14.96 15.81L12.12 13.62C11.36 14.15 10.34 14.52 9 14.52C6.62 14.52 4.61 12.96 3.88 10.84L3.77 10.85L1.01 12.99L0.98 13.09C2.46 16.03 5.48 18 9 18Z" fill="#34A853"/>
+                        <path d="M3.88 10.84C3.69 10.28 3.58 9.68 3.58 9.07C3.58 8.46 3.69 7.86 3.87 7.3L3.87 7.18L1.08 5.01L0.98 5.05C0.36 6.3 0 7.71 0 9.13C0 10.55 0.36 11.96 0.98 13.21L3.88 10.84Z" fill="#FBBC05"/>
+                        <path d="M9 3.58C10.62 3.58 11.74 4.25 12.37 4.84L14.89 2.39C13.46 1.05 11.43 0.24 9 0.24C5.48 0.24 2.46 2.21 0.98 5.15L3.87 7.4C4.61 5.28 6.62 3.72 9 3.72V3.58Z" fill="#EB4335"/>
+                    </svg>
+                    Conectar con Google
+                </button>
+            </div>
+
+            <!-- Formulario de fechas y exportación -->
+            <form id="importar-form">
+                <div class="form-group">
+                    <label for="fecha-inicio">Fecha de Inicio:</label>
+                    <input type="date" id="fecha-inicio" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="fecha-fin">Fecha de Fin:</label>
+                    <input type="date" id="fecha-fin" required>
+                </div>
+
+                <div class="modal-buttons">
+                    <button type="button" class="btn btn-secondary" onclick="cerrarModalImportar()">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="btn-exportar" onclick="exportarAGoogleSheets()" disabled>Importar Informe</button>
                 </div>
             </form>
         </div>
@@ -1094,6 +1211,174 @@
                     }
                 }
             }, 5000); // 5 segundos después de cargar las tareas
+        }
+
+        // ============================================
+        // Funciones para Importar Informe a Google Sheets
+        // ============================================
+
+        // Variable global para almacenar el estado de autenticación de Google
+        let googleAuthToken = null;
+
+        // Abrir modal de importar informe
+        function abrirModalImportar() {
+            const modal = document.getElementById('importar-modal');
+            modal.style.display = 'block';
+
+            // Establecer fechas por defecto (último mes)
+            const hoy = new Date();
+            const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+
+            document.getElementById('fecha-fin').valueAsDate = hoy;
+            document.getElementById('fecha-inicio').valueAsDate = inicioMes;
+
+            // Verificar si ya hay autenticación guardada
+            verificarEstadoGoogleAuth();
+        }
+
+        // Cerrar modal de importar informe
+        function cerrarModalImportar() {
+            const modal = document.getElementById('importar-modal');
+            modal.style.display = 'none';
+        }
+
+        // Cerrar modal al hacer click fuera
+        window.onclick = function(event) {
+            const modalAlerta = document.getElementById('alerta-modal');
+            const modalImportar = document.getElementById('importar-modal');
+
+            if (event.target == modalAlerta) {
+                modalAlerta.style.display = 'none';
+            }
+            if (event.target == modalImportar) {
+                modalImportar.style.display = 'none';
+            }
+        }
+
+        // Verificar estado de autenticación de Google
+        async function verificarEstadoGoogleAuth() {
+            try {
+                const response = await fetch('/api/google/auth-status');
+                const data = await response.json();
+
+                if (data.authenticated) {
+                    actualizarEstadoGoogleUI(true, data.email);
+                    googleAuthToken = data.token;
+                } else {
+                    actualizarEstadoGoogleUI(false);
+                }
+            } catch (error) {
+                console.error('Error al verificar estado de Google Auth:', error);
+                actualizarEstadoGoogleUI(false);
+            }
+        }
+
+        // Actualizar UI del estado de autenticación de Google
+        function actualizarEstadoGoogleUI(conectado, email = '') {
+            const indicator = document.getElementById('google-status-indicator');
+            const statusText = document.getElementById('google-status-text');
+            const btnLogin = document.getElementById('btn-google-login');
+            const btnExportar = document.getElementById('btn-exportar');
+
+            if (conectado) {
+                indicator.classList.remove('disconnected');
+                indicator.classList.add('connected');
+                statusText.textContent = email ? `Conectado como ${email}` : 'Conectado a Google';
+                btnLogin.textContent = 'Desconectar';
+                btnLogin.onclick = desconectarGoogle;
+                btnExportar.disabled = false;
+            } else {
+                indicator.classList.remove('connected');
+                indicator.classList.add('disconnected');
+                statusText.textContent = 'No conectado a Google';
+                btnLogin.innerHTML = '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M17.64 9.2C17.64 8.46 17.58 7.92 17.45 7.36H9V10.7H13.96C13.86 11.53 13.32 12.78 12.12 13.62L12.11 13.73L14.78 15.79L14.96 15.81C16.66 14.25 17.64 11.94 17.64 9.2Z" fill="#4285F4"/><path d="M9 18C11.43 18 13.47 17.19 14.96 15.81L12.12 13.62C11.36 14.15 10.34 14.52 9 14.52C6.62 14.52 4.61 12.96 3.88 10.84L3.77 10.85L1.01 12.99L0.98 13.09C2.46 16.03 5.48 18 9 18Z" fill="#34A853"/><path d="M3.88 10.84C3.69 10.28 3.58 9.68 3.58 9.07C3.58 8.46 3.69 7.86 3.87 7.3L3.87 7.18L1.08 5.01L0.98 5.05C0.36 6.3 0 7.71 0 9.13C0 10.55 0.36 11.96 0.98 13.21L3.88 10.84Z" fill="#FBBC05"/><path d="M9 3.58C10.62 3.58 11.74 4.25 12.37 4.84L14.89 2.39C13.46 1.05 11.43 0.24 9 0.24C5.48 0.24 2.46 2.21 0.98 5.15L3.87 7.4C4.61 5.28 6.62 3.72 9 3.72V3.58Z" fill="#EB4335"/></svg> Conectar con Google';
+                btnLogin.onclick = iniciarLoginGoogle;
+                btnExportar.disabled = true;
+                googleAuthToken = null;
+            }
+        }
+
+        // Iniciar login de Google
+        function iniciarLoginGoogle() {
+            // Abrir ventana de OAuth de Google
+            const width = 500;
+            const height = 600;
+            const left = (screen.width / 2) - (width / 2);
+            const top = (screen.height / 2) - (height / 2);
+
+            const authWindow = window.open(
+                '/oauth/google/login',
+                'Google OAuth',
+                `width=${width},height=${height},top=${top},left=${left}`
+            );
+
+            // Escuchar mensaje de la ventana de OAuth
+            window.addEventListener('message', function(event) {
+                if (event.data.type === 'google-auth-success') {
+                    googleAuthToken = event.data.token;
+                    actualizarEstadoGoogleUI(true, event.data.email);
+                    authWindow.close();
+                }
+            });
+        }
+
+        // Desconectar de Google
+        async function desconectarGoogle() {
+            try {
+                await fetch('/api/google/logout', { method: 'POST' });
+                actualizarEstadoGoogleUI(false);
+            } catch (error) {
+                console.error('Error al desconectar de Google:', error);
+                alert('Error al desconectar de Google');
+            }
+        }
+
+        // Exportar a Google Sheets
+        async function exportarAGoogleSheets() {
+            const fechaInicio = document.getElementById('fecha-inicio').value;
+            const fechaFin = document.getElementById('fecha-fin').value;
+
+            if (!fechaInicio || !fechaFin) {
+                alert('Por favor, selecciona las fechas de inicio y fin');
+                return;
+            }
+
+            if (new Date(fechaInicio) > new Date(fechaFin)) {
+                alert('La fecha de inicio debe ser anterior a la fecha de fin');
+                return;
+            }
+
+            const btnExportar = document.getElementById('btn-exportar');
+            btnExportar.disabled = true;
+            btnExportar.textContent = 'Exportando...';
+
+            try {
+                const response = await fetch('/api/export-to-google-sheets', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        fecha_inicio: fechaInicio,
+                        fecha_fin: fechaFin
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert(`¡Informe exportado exitosamente!\n\nSe exportaron ${data.filas_escritas} filas.\n\nPuedes ver el informe en:\n${data.url}`);
+                    cerrarModalImportar();
+                } else {
+                    alert(`Error al exportar: ${data.error || 'Error desconocido'}`);
+                }
+            } catch (error) {
+                console.error('Error al exportar a Google Sheets:', error);
+                alert('Error al exportar el informe. Por favor, intenta de nuevo.');
+            } finally {
+                btnExportar.disabled = false;
+                btnExportar.textContent = 'Importar Informe';
+            }
         }
 
     </script>
