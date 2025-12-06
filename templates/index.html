@@ -172,11 +172,11 @@
         }
 
         .tarea-en-progreso {
-            background-color: #f8d7da !important;
+            background-color: #fff3cd !important;
         }
 
         .tarea-en-progreso:hover {
-            background-color: #f5c6cb !important;
+            background-color: #ffecb3 !important;
         }
 
         .btn-config {
@@ -500,8 +500,14 @@
                 <div class="form-group">
                     <label>Tiempo sin actualización para enviar alerta:</label>
                     <div class="inline-inputs">
-                        <input type="number" id="aviso-horas" placeholder="Horas" min="0" value="0">
-                        <input type="number" id="aviso-minutos" placeholder="Minutos" min="0" value="0">
+                        <div style="display: flex; flex-direction: column; margin-right: 10px;">
+                            <label for="aviso-horas" style="font-size: 12px; margin-bottom: 3px; color: #666;">Horas</label>
+                            <input type="number" id="aviso-horas" placeholder="0" min="0" value="0" style="width: 80px;">
+                        </div>
+                        <div style="display: flex; flex-direction: column;">
+                            <label for="aviso-minutos" style="font-size: 12px; margin-bottom: 3px; color: #666;">Minutos</label>
+                            <input type="number" id="aviso-minutos" placeholder="0" min="0" value="0" style="width: 80px;">
+                        </div>
                     </div>
                 </div>
 
@@ -964,15 +970,11 @@
                     const tr = document.createElement('tr');
                     tr.setAttribute('data-task-id', tarea.id);
 
-                    // Aplicar clase según el estado y si tiene alerta activa
+                    // Aplicar clase según el estado
                     if (tarea.estado === 'completada') {
                         tr.className = 'tarea-completada';
                     } else if (tarea.estado === 'en_progreso') {
                         tr.className = 'tarea-en-progreso';
-                    }
-
-                    if (tarea.alerta && tarea.alerta.aviso_activado) {
-                        tr.className = (tr.className ? tr.className + ' ' : '') + 'alerta-activa';
                     }
 
                     const estadoAlerta = tarea.alerta && tarea.alerta.aviso_activado ?
