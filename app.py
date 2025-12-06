@@ -2615,10 +2615,24 @@ def export_to_google_sheets():
         if not fecha_inicio or not fecha_fin:
             return jsonify({'error': 'Faltan las fechas de inicio y fin'}), 400
 
-        # Convertir fechas a datetime con timezone UTC
+        # Convertir fechas a datetime con timezone local (Europe/Madrid) y luego a UTC
         from datetime import timezone
-        fecha_inicio_dt = datetime.strptime(fecha_inicio, '%Y-%m-%d').replace(hour=0, minute=0, second=0, tzinfo=timezone.utc)
-        fecha_fin_dt = datetime.strptime(fecha_fin, '%Y-%m-%d').replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+        import pytz
+
+        # Usar la zona horaria de España (Europe/Madrid)
+        local_tz = pytz.timezone('Europe/Madrid')
+
+        # Crear fechas en hora local
+        fecha_inicio_naive = datetime.strptime(fecha_inicio, '%Y-%m-%d').replace(hour=0, minute=0, second=0)
+        fecha_fin_naive = datetime.strptime(fecha_fin, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+
+        # Localizar a la zona horaria local
+        fecha_inicio_local = local_tz.localize(fecha_inicio_naive)
+        fecha_fin_local = local_tz.localize(fecha_fin_naive)
+
+        # Convertir a UTC para el cálculo
+        fecha_inicio_dt = fecha_inicio_local.astimezone(timezone.utc)
+        fecha_fin_dt = fecha_fin_local.astimezone(timezone.utc)
 
         print(f"[INFO] Exportando informe desde {fecha_inicio} hasta {fecha_fin}")
 
