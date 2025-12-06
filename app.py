@@ -2848,11 +2848,14 @@ def export_to_google_sheets():
             for folder in folders:
                 horas_totales = calcular_horas_proyecto('folder', folder['id'], fecha_inicio_dt, fecha_fin_dt)
                 print(f"[INFO] Folder '{folder['name']}': {horas_totales:.2f} horas")
-                # Añadir TODOS los proyectos, incluso con 0 horas
-                proyectos_con_horas.append({
-                    'nombre': folder['name'],
-                    'horas': horas_totales
-                })
+                # Solo añadir proyectos con tiempo registrado (> 0 horas)
+                if horas_totales > 0:
+                    proyectos_con_horas.append({
+                        'nombre': folder['name'],
+                        'horas': horas_totales
+                    })
+                else:
+                    print(f"[INFO] Folder '{folder['name']}' excluido (0 horas)")
 
             # Obtener lists del espacio
             lists = db.get_lists_by_space(espacio['id'])
@@ -2861,11 +2864,14 @@ def export_to_google_sheets():
             for lista in lists:
                 horas_totales = calcular_horas_proyecto('list', lista['id'], fecha_inicio_dt, fecha_fin_dt)
                 print(f"[INFO] Lista '{lista['name']}': {horas_totales:.2f} horas")
-                # Añadir TODOS los proyectos, incluso con 0 horas
-                proyectos_con_horas.append({
-                    'nombre': lista['name'],
-                    'horas': horas_totales
-                })
+                # Solo añadir proyectos con tiempo registrado (> 0 horas)
+                if horas_totales > 0:
+                    proyectos_con_horas.append({
+                        'nombre': lista['name'],
+                        'horas': horas_totales
+                    })
+                else:
+                    print(f"[INFO] Lista '{lista['name']}' excluida (0 horas)")
 
         print(f"[INFO] Total de proyectos a exportar: {len(proyectos_con_horas)}")
 
