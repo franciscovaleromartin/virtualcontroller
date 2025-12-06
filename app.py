@@ -2598,6 +2598,182 @@ def google_logout():
         return jsonify({'error': str(e)}), 500
 
 
+def sync_spaces_internal(headers):
+    """Sincroniza todos los espacios desde ClickUp API sin devolver HTTP response"""
+    try:
+        print("[INFO] Sincronizando espacios desde ClickUp API...")
+        teams_response = requests.get('https://api.clickup.com/api/v2/team', headers=headers, timeout=10)
+
+        if teams_response.status_code != 200:
+            print(f"[ERROR] Error al obtener teams: {teams_response.status_code}")
+            return []
+
+        teams = teams_response.json()['teams']
+        all_spaces = []
+
+        for team in teams:
+            spaces_response = requests.get(
+                f'https://api.clickup.com/api/v2/team/{team["id"]}/space',
+                headers=headers,
+                timeout=10
+            )
+            if spaces_response.status_code == 200:
+                spaces = spaces_response.json()['spaces']
+                for space in spaces:
+                    space_data = {
+                        'id': space['id'],
+                        'name': space['name'],
+                        'team_id': team['id']
+                    }
+                    all_spaces.append(space_data)
+
+                    # Guardar el espacio en la base de datos
+                    db.save_space(space['id'], space['name'], team['id'], metadata=space)
+                    print(f"[INFO] Espacio {space['id']} sincronizado: {space['name']}")
+
+        print(f"[INFO] Total de espacios sincronizados: {len(all_spaces)}")
+        return all_spaces
+
+    except Exception as e:
+        print(f"[ERROR] Error al sincronizar espacios: {str(e)}")
+        return []
+
+
+def sync_projects_internal(space_id, headers):
+    """Sincroniza proyectos (folders y lists) de un espacio desde ClickUp API"""
+    try:
+        print(f"[INFO] Sincronizando proyectos del espacio {space_id}...")
+        proyectos = []
+
+        # Obtener folders del space desde la API
+        folders_response = requests.get(
+            f'https://api.clickup.com/api/v2/space/{space_id}/folder',
+            headers=headers,
+            timeout=10
+        )
+
+        if folders_response.status_code == 200:
+            folders = folders_response.json()['folders']
+            for folder in folders:
+                # Guardar folder en BD
+                db.save_folder(folder['id'], folder['name'], space_id, folder.get('hidden', False), metadata=folder)
+                print(f"[INFO] Folder sincronizado: {folder['name']}")
+
+                proyectos.append({
+                    'id': folder['id'],
+                    'name': folder['name'],
+                    'type': 'folder'
+                })
+
+                # Obtener las listas dentro de cada folder
+                folder_lists_response = requests.get(
+                    f'https://api.clickup.com/api/v2/folder/{folder["id"]}/list',
+                    headers=headers,
+                    timeout=10
+                )
+                if folder_lists_response.status_code == 200:
+                    for lista in folder_lists_response.json()['lists']:
+                        # Guardar lista en BD
+                        db.save_list(lista['id'], lista['name'], space_id, folder['id'],
+                                   lista.get('archived', False), metadata=lista)
+                        print(f"[INFO] Lista sincronizada: {lista['name']}")
+
+                        proyectos.append({
+                            'id': lista['id'],
+                            'name': lista['name'],
+                            'type': 'list',
+                            'folder_id': folder['id']
+                        })
+
+        # Obtener listas sin folder (directamente en el space)
+        lists_response = requests.get(
+            f'https://api.clickup.com/api/v2/space/{space_id}/list',
+            headers=headers,
+            timeout=10
+        )
+
+        if lists_response.status_code == 200:
+            listas = lists_response.json()['lists']
+            for lista in listas:
+                # Guardar lista en BD
+                db.save_list(lista['id'], lista['name'], space_id, None,
+                           lista.get('archived', False), metadata=lista)
+                print(f"[INFO] Lista sincronizada (sin folder): {lista['name']}")
+
+                proyectos.append({
+                    'id': lista['id'],
+                    'name': lista['name'],
+                    'type': 'list'
+                })
+
+        print(f"[INFO] Total de proyectos sincronizados para espacio {space_id}: {len(proyectos)}")
+        return proyectos
+
+    except Exception as e:
+        print(f"[ERROR] Error al sincronizar proyectos del espacio {space_id}: {str(e)}")
+        return []
+
+
+def sync_all_data_from_clickup():
+    """
+    Sincroniza todos los datos desde ClickUp (espacios, proyectos y tareas)
+    antes de generar un informe para asegurar datos actualizados.
+    """
+    try:
+        print("[INFO] ========================================")
+        print("[INFO] Iniciando sincronización completa desde ClickUp API...")
+        print("[INFO] ========================================")
+
+        # Obtener headers de autenticación
+        headers = get_headers()
+        if not headers:
+            print("[ERROR] No se pudieron obtener headers de autenticación")
+            return False
+
+        # 1. Sincronizar espacios
+        espacios = sync_spaces_internal(headers)
+        if not espacios:
+            print("[WARNING] No se encontraron espacios o hubo un error")
+            return False
+
+        print(f"\n[INFO] Sincronizando proyectos y tareas de {len(espacios)} espacios...")
+
+        # 2. Para cada espacio, sincronizar proyectos
+        total_proyectos = 0
+        total_tareas = 0
+
+        for espacio in espacios:
+            print(f"\n[INFO] --- Procesando espacio: {espacio['name']} ---")
+            proyectos = sync_projects_internal(espacio['id'], headers)
+            total_proyectos += len(proyectos)
+
+            # 3. Para cada proyecto (lista), sincronizar tareas
+            for proyecto in proyectos:
+                if proyecto['type'] == 'list':
+                    print(f"[INFO] Sincronizando tareas de lista: {proyecto['name']}")
+                    try:
+                        tareas = obtener_tareas_de_lista(proyecto['id'], headers)
+                        total_tareas += len(tareas)
+                        print(f"[INFO] {len(tareas)} tareas sincronizadas de {proyecto['name']}")
+                    except Exception as e:
+                        print(f"[ERROR] Error al sincronizar tareas de {proyecto['name']}: {str(e)}")
+
+        print("\n[INFO] ========================================")
+        print(f"[INFO] Sincronización completada exitosamente!")
+        print(f"[INFO] Espacios: {len(espacios)}")
+        print(f"[INFO] Proyectos: {total_proyectos}")
+        print(f"[INFO] Tareas: {total_tareas}")
+        print("[INFO] ========================================\n")
+
+        return True
+
+    except Exception as e:
+        print(f"[ERROR] Error en sincronización completa: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 @app.route('/api/export-to-google-sheets', methods=['POST'])
 def export_to_google_sheets():
     """Exporta el informe de horas de proyectos a Google Sheets"""
@@ -2650,6 +2826,13 @@ def export_to_google_sheets():
         if credentials.expired and credentials.refresh_token:
             credentials.refresh(Request())
             session['google_credentials']['token'] = credentials.token
+
+        # IMPORTANTE: Refrescar todos los datos desde ClickUp antes de generar el informe
+        print("[INFO] Refrescando datos desde ClickUp para obtener información actualizada...")
+        sync_success = sync_all_data_from_clickup()
+
+        if not sync_success:
+            print("[WARNING] La sincronización completa no se pudo completar, pero continuaremos con los datos disponibles")
 
         # Obtener todos los proyectos (folders y lists) de todos los espacios
         espacios = db.get_all_spaces()
