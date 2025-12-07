@@ -9,6 +9,7 @@ Es una aplicación web Flask que se conecta a tu cuenta de ClickUp y te permite:
 - Configurar alertas personalizadas por email para cada tarea
 - Recibir notificaciones automáticas cuando una tarea necesita atención
 - Integrar webhooks para sincronización en tiempo real con ClickUp
+- Generar informes de horas trabajadas y exportarlos a Google Sheets
 
 ## ¿Por qué debería importarte?
 
@@ -21,6 +22,7 @@ Es una aplicación web Flask que se conecta a tu cuenta de ClickUp y te permite:
 - ❌ Falta de visibilidad del tiempo real trabajado en cada tarea
 - ❌ Necesidad de recordar manualmente hacer seguimiento de tareas críticas
 - ❌ Clientes o stakeholders preguntando por tareas que llevan tiempo sin moverse
+- ❌ Dificultad para generar reportes de horas trabajadas para facturación
 
 **Virtual Controller soluciona todo esto automáticamente:**
 
@@ -29,13 +31,15 @@ Es una aplicación web Flask que se conecta a tu cuenta de ClickUp y te permite:
 - ✅ **Visibilidad real**: Ve exactamente cuánto tiempo se ha trabajado en cada tarea (solo cuando está "In Progress")
 - ✅ **Proactividad**: Actúa antes de que los problemas se conviertan en crisis
 - ✅ **Sincronización en tiempo real**: Con webhooks, los cambios en ClickUp se reflejan instantáneamente
+- ✅ **Informes automáticos**: Genera reportes de horas trabajadas por proyecto y expórtalos a Google Sheets con un clic
 
 ### 💡 Casos de uso ideales
 
-- **Project Managers**: Mantén todos los proyectos activos sin tareas abandonadas
-- **Equipos de desarrollo**: Asegúrate de que ningún bug o tarea quede olvidada
-- **Agencias**: Monitorea múltiples proyectos de clientes simultáneamente
-- **Freelancers**: Ten control total de tu carga de trabajo y tiempos
+- **Project Managers**: Mantén todos los proyectos activos sin tareas abandonadas y genera informes de horas para stakeholders
+- **Equipos de desarrollo**: Asegúrate de que ningún bug o tarea quede olvidada y mide el tiempo real invertido
+- **Agencias**: Monitorea múltiples proyectos de clientes simultáneamente y genera reportes de facturación automáticos
+- **Freelancers**: Ten control total de tu carga de trabajo, tiempos y genera informes para cobrar a tus clientes
+- **Consultores**: Trackea el tiempo dedicado a cada proyecto y exporta reportes para justificar horas facturadas
 - **Cualquiera que use ClickUp**: Y quiera ser más productivo sin esfuerzo extra
 
 ## ¿Cómo se usa?
@@ -112,6 +116,11 @@ SMTP_PASSWORD=tu_contraseña_de_aplicacion
 # Webhook (opcional pero recomendado)
 WEBHOOK_SECRET_TOKEN=genera_un_token_aleatorio_aqui
 
+# Google OAuth para Informes (opcional)
+GOOGLE_CLIENT_ID=tu_google_client_id
+GOOGLE_CLIENT_SECRET=tu_google_client_secret
+GOOGLE_REDIRECT_URI=http://localhost:5000/oauth/google/callback
+
 # Base de datos (opcional, tiene un default)
 DATABASE_PATH=virtualcontroller.db
 ```
@@ -159,6 +168,29 @@ El sistema de alertas funciona basándose en el **tiempo total trabajado** en ca
 - ❗ La alerta **solo se verifica** cuando la tarea está actualmente en estado "In Progress"
 - ❗ El contador **no avanza** cuando la tarea está en "To Do" o "Complete"
 - ❗ El tiempo se calcula desde el historial completo de cambios de estado
+
+#### Generar informes de horas trabajadas
+
+1. Haz clic en el botón **"📊 Importar Informe"** en la barra superior
+2. Si es tu primera vez:
+   - Se abrirá una ventana para autenticarte con Google
+   - Acepta los permisos para Google Sheets
+   - Solo necesitas hacer esto una vez
+3. Selecciona el **rango de fechas**:
+   - Fecha de inicio (ej: 2024-12-01)
+   - Fecha de fin (ej: 2024-12-31)
+4. Haz clic en **"Importar Informe"**
+5. Espera unos segundos mientras el sistema:
+   - Sincroniza los datos desde ClickUp
+   - Calcula las horas por proyecto
+   - Exporta a Google Sheets
+6. 📊 **¡Listo!** Haz clic en "Ver Informe en Google Sheets" para abrir el reporte
+
+**El informe incluye:**
+- Fecha del reporte
+- Nombre de cada proyecto (folders y listas)
+- Total de horas trabajadas en formato "Xh Ym"
+- Solo proyectos con tiempo registrado (> 0 horas)
 
 ## Características avanzadas
 
@@ -241,6 +273,96 @@ Virtual Controller almacena todos los datos localmente en una base de datos SQLi
 - ✅ Sincronización automática con webhooks
 - ✅ Log completo de eventos para debugging
 - ✅ No requiere configuración manual
+
+### 📊 Generación de Informes a Google Sheets
+
+Virtual Controller incluye un potente sistema de exportación de informes que te permite generar reportes de horas trabajadas por proyecto y exportarlos directamente a Google Sheets.
+
+#### ¿Qué información exporta?
+
+El informe incluye:
+- **Fecha del reporte**: Cuándo se generó el informe
+- **Nombre del proyecto**: Cada carpeta y lista de ClickUp
+- **Total de horas trabajadas**: Tiempo real trabajado (solo en estado "In Progress")
+
+#### Cómo usar los informes
+
+1. **Autenticación con Google**:
+   - Haz clic en el botón **"📊 Importar Informe"** en la interfaz
+   - Inicia sesión con tu cuenta de Google (se solicitarán permisos para Google Sheets)
+   - Solo necesitas hacer esto una vez
+
+2. **Configurar las credenciales de Google OAuth** (si eres el administrador):
+   - Ve a [Google Cloud Console](https://console.cloud.google.com/)
+   - Crea un proyecto nuevo o usa uno existente
+   - Activa la **Google Sheets API**
+   - Crea credenciales OAuth 2.0
+   - Descarga el JSON de credenciales
+   - Agrega las credenciales a tu `.env`:
+     ```env
+     GOOGLE_CLIENT_ID=tu_client_id
+     GOOGLE_CLIENT_SECRET=tu_client_secret
+     GOOGLE_REDIRECT_URI=https://tu-dominio.com/oauth/google/callback
+     ```
+
+3. **Generar un informe**:
+   - Haz clic en **"📊 Importar Informe"**
+   - Selecciona el **rango de fechas** (fecha inicio y fecha fin)
+   - Haz clic en **"Importar Informe"**
+   - El sistema automáticamente:
+     1. 🔄 Sincroniza todos los datos desde ClickUp
+     2. 📊 Calcula las horas trabajadas por proyecto en ese rango
+     3. 📤 Exporta los datos a Google Sheets
+     4. ✅ Te muestra un enlace directo al informe
+
+4. **Ver el informe**:
+   - Haz clic en el enlace **"📊 Ver Informe en Google Sheets"**
+   - El informe se abre en una nueva pestaña
+   - Los datos se añaden al final (modo append), por lo que puedes generar múltiples informes
+
+#### Cálculo inteligente de horas
+
+El sistema calcula las horas de forma precisa:
+
+- ✅ **Solo tiempo "In Progress"**: Cuenta únicamente cuando las tareas están siendo trabajadas
+- ✅ **Filtrado por rango**: Solo incluye el tiempo trabajado dentro de las fechas seleccionadas
+- ✅ **Historial completo**: Analiza todos los cambios de estado de cada tarea
+- ✅ **Sin duplicados**: Evita contar el mismo tiempo dos veces
+- ✅ **Solo proyectos con horas**: No exporta proyectos con 0 horas (mantiene el informe limpio)
+
+**Ejemplo de cálculo:**
+- Rango del informe: 1-15 de Diciembre
+- Tarea 1: estuvo 5h en "In Progress" el día 3 de Diciembre → ✅ Se cuenta
+- Tarea 2: estuvo 3h en "In Progress" el 25 de Noviembre → ❌ No se cuenta (fuera del rango)
+- Tarea 3: 2h "In Progress" el 14 de Diciembre + 2h el 20 de Diciembre → ✅ Solo se cuentan las 2h del día 14
+
+#### Ventajas de los informes
+
+- 📈 **Análisis de productividad**: Ve cuántas horas se dedican a cada proyecto
+- 💼 **Facturación precisa**: Datos exactos para cobrar a clientes
+- 📊 **Histórico completo**: Genera informes de cualquier período pasado
+- 🔄 **Siempre actualizado**: Sincroniza con ClickUp antes de cada export
+- 📝 **Fácil de compartir**: Los informes están en Google Sheets, accesibles para todo tu equipo
+- 🎯 **Sin configuración manual**: Todo es automático, solo selecciona las fechas
+
+#### Configuración del Spreadsheet
+
+Por defecto, el sistema exporta a un Google Spreadsheet específico. Si quieres cambiar el destino:
+
+1. Crea un nuevo Google Spreadsheet
+2. Copia el ID del Spreadsheet (está en la URL):
+   ```
+   https://docs.google.com/spreadsheets/d/[ESTE_ES_EL_ID]/edit
+   ```
+3. Modifica el archivo `app.py` y cambia la variable `GOOGLE_SHEET_ID`
+
+**Formato del informe en Google Sheets:**
+
+| Fecha Reporte | Nombre Proyecto | Total Horas Registradas |
+|--------------|----------------|------------------------|
+| 2024-12-07   | Proyecto Web   | 15h 30m                |
+| 2024-12-07   | App Mobile     | 8h 45m                 |
+| 2024-12-07   | Marketing      | 3h 15m                 |
 
 ## Estructura del proyecto
 
