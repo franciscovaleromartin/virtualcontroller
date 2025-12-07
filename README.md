@@ -2,7 +2,7 @@
 
 ## ¿Qué es?
 
-**Virtual Controller** es un sistema de monitoreo inteligente y alertas automáticas para proyectos de ClickUp. Funciona como un "vigilante" que te avisa cuando tus tareas llevan demasiado tiempo sin actualizarse, ayudándote a mantener tus proyectos en movimiento.
+**Virtual Controller** es un sistema de monitoreo inteligente y alertas automáticas para proyectos de ClickUp. Funciona como un "vigilante" que te avisa cuando tus tareas llevan demasiado tiempo trabajándose, ayudándote a detectar tareas que consumen más tiempo del esperado y mantener tus proyectos bajo control.
 
 Es una aplicación web Flask que se conecta a tu cuenta de ClickUp y te permite:
 - Visualizar todas tus tareas con el tiempo real que has trabajado en ellas
@@ -24,7 +24,7 @@ Es una aplicación web Flask que se conecta a tu cuenta de ClickUp y te permite:
 
 **Virtual Controller soluciona todo esto automáticamente:**
 
-- ✅ **Alertas automáticas**: Recibes un email cuando una tarea lleva X tiempo sin actualizarse
+- ✅ **Alertas automáticas por tiempo trabajado**: Recibes un email cuando una tarea lleva demasiado tiempo en estado "In Progress"
 - ✅ **Ahorro de tiempo**: No más revisiones manuales constantes de ClickUp
 - ✅ **Visibilidad real**: Ve exactamente cuánto tiempo se ha trabajado en cada tarea (solo cuando está "In Progress")
 - ✅ **Proactividad**: Actúa antes de que los problemas se conviertan en crisis
@@ -135,17 +135,30 @@ DATABASE_PATH=virtualcontroller.db
 2. En el modal:
    - ✅ Activa **"Activar aviso de demora"**
    - 📧 Ingresa el **email** donde recibirás alertas
-   - ⏰ Configura el **tiempo sin actualización** (horas y minutos) para enviar la alerta
+   - ⏰ Configura el **límite de tiempo trabajado** (horas y minutos)
 3. Haz clic en **"Guardar"**
-4. 🔔 Ahora recibirás un email si la tarea no se actualiza en el tiempo configurado
+4. 🔔 Recibirás un email cuando la tarea supere el tiempo configurado en estado "In Progress"
 
 #### Cómo funcionan las alertas
 
-- ✅ Verificación automática cada **5 minutos**
-- ✅ Email de alerta cuando la tarea no se actualiza en el tiempo configurado
-- ✅ **Máximo 1 email por día** por tarea (evita spam)
-- ✅ El email incluye un **enlace directo** a la tarea en ClickUp
-- ✅ Las alertas se desactivan automáticamente después de enviar el email
+El sistema de alertas funciona basándose en el **tiempo total trabajado** en cada tarea:
+
+- ⏱️ **Cálculo inteligente**: El sistema suma solo el tiempo que la tarea ha estado en estado "In Progress"
+- ✅ **Verificación automática cada 5 minutos**: Revisa todas las tareas con alertas activas
+- 🎯 **Alerta por tiempo trabajado**: Se envía email cuando el tiempo trabajado supera el límite configurado
+- 📧 **Email automático**: Incluye nombre de la tarea, proyecto, tiempo trabajado y enlace directo
+- 🔕 **Desactivación automática**: La alerta se desactiva después de enviar el email (evita spam)
+
+**Ejemplo práctico:**
+- Configuras una alerta de 8 horas para una tarea
+- La tarea pasa 4 horas en "In Progress", luego cambia a "To Do"
+- Más tarde vuelve a "In Progress" y pasa 5 horas más
+- Total: 9 horas trabajadas → Se envía la alerta ✉️
+
+**Importante:**
+- ❗ La alerta **solo se verifica** cuando la tarea está actualmente en estado "In Progress"
+- ❗ El contador **no avanza** cuando la tarea está en "To Do" o "Complete"
+- ❗ El tiempo se calcula desde el historial completo de cambios de estado
 
 ## Características avanzadas
 
