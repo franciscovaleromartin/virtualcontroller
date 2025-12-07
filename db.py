@@ -109,6 +109,7 @@ def init_db():
                 task_id TEXT NOT NULL,
                 aviso_activado BOOLEAN DEFAULT 0,
                 email_aviso TEXT,
+                aviso_dias INTEGER DEFAULT 0,
                 aviso_horas INTEGER DEFAULT 0,
                 aviso_minutos INTEGER DEFAULT 0,
                 tipo_alerta TEXT DEFAULT 'sin_actualizar',
@@ -185,6 +186,19 @@ def migrate_db():
             """)
             conn.commit()
             print("[INFO] Columna 'tipo_alerta' agregada exitosamente")
+
+        # Verificar si la columna aviso_dias existe en task_alerts
+        cursor.execute("PRAGMA table_info(task_alerts)")
+        columns = [column[1] for column in cursor.fetchall()]
+
+        if 'aviso_dias' not in columns:
+            print("[INFO] Agregando columna 'aviso_dias' a task_alerts...")
+            cursor.execute("""
+                ALTER TABLE task_alerts
+                ADD COLUMN aviso_dias INTEGER DEFAULT 0
+            """)
+            conn.commit()
+            print("[INFO] Columna 'aviso_dias' agregada exitosamente")
 
 
 # === FUNCIONES PARA SPACES ===
@@ -450,25 +464,26 @@ def delete_task(task_id):
 
 # === FUNCIONES PARA TASK ALERTS ===
 
-def save_task_alert(task_id, aviso_activado, email_aviso, aviso_horas, aviso_minutos, tipo_alerta='sin_actualizar'):
+def save_task_alert(task_id, aviso_activado, email_aviso, aviso_dias, aviso_horas, aviso_minutos, tipo_alerta='sin_actualizar'):
     """Guarda o actualiza la configuración de alerta de una tarea"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO task_alerts (
-                task_id, aviso_activado, email_aviso, aviso_horas, aviso_minutos, tipo_alerta,
+                task_id, aviso_activado, email_aviso, aviso_dias, aviso_horas, aviso_minutos, tipo_alerta,
                 ultima_actualizacion, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT(task_id) DO UPDATE SET
                 aviso_activado = excluded.aviso_activado,
                 email_aviso = excluded.email_aviso,
+                aviso_dias = excluded.aviso_dias,
                 aviso_horas = excluded.aviso_horas,
                 aviso_minutos = excluded.aviso_minutos,
                 tipo_alerta = excluded.tipo_alerta,
                 ultima_actualizacion = CURRENT_TIMESTAMP,
                 updated_at = CURRENT_TIMESTAMP
-        """, (task_id, aviso_activado, email_aviso, aviso_horas, aviso_minutos, tipo_alerta))
+        """, (task_id, aviso_activado, email_aviso, aviso_dias, aviso_horas, aviso_minutos, tipo_alerta))
         conn.commit()
 
 
