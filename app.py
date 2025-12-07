@@ -1986,6 +1986,7 @@ def verificar_alertas():
             email_destino = alerta['email_aviso']
             tiempo_max_horas = alerta['aviso_horas']
             tiempo_max_minutos = alerta['aviso_minutos']
+            tipo_alerta = alerta.get('tipo_alerta', 'sin_actualizar')
 
             print(f"\n[INFO] Verificando alerta para tarea: {tarea_nombre} (ID: {tarea_id})")
 
@@ -2067,7 +2068,8 @@ def verificar_alertas():
                         tarea_nombre,
                         proyecto_nombre,
                         tarea_url,
-                        tiempo_en_progreso_str
+                        tiempo_en_progreso_str,
+                        tipo_alerta
                     ):
                         print("\n" + "✅"*20)
                         print("✅ EMAIL ENVIADO EXITOSAMENTE (desde verificación periódica)")
@@ -2159,6 +2161,7 @@ def debug_verificar_alertas_ahora():
         for alerta in alertas_activas:
             tarea_id = alerta['task_id']
             tarea_nombre = alerta['task_name']
+            tipo_alerta = alerta.get('tipo_alerta', 'sin_actualizar')
 
             try:
                 print(f"\n[DEBUG] ──── Procesando: {tarea_nombre} ────")
@@ -2211,7 +2214,7 @@ def debug_verificar_alertas_ahora():
                     tarea_url = alerta['task_url']
 
                     # Intentar enviar email
-                    if enviar_email_alerta(alerta['email_aviso'], tarea_nombre, proyecto_nombre, tarea_url, tiempo_str):
+                    if enviar_email_alerta(alerta['email_aviso'], tarea_nombre, proyecto_nombre, tarea_url, tiempo_str, tipo_alerta):
                         db.deactivate_task_alert(tarea_id)
                         alertas_enviadas.append({
                             'tarea': tarea_nombre,
@@ -2285,7 +2288,8 @@ def test_email():
             tarea_nombre="Tarea de Prueba del Sistema",
             proyecto_nombre="Proyecto de Prueba",
             tarea_url="https://app.clickup.com/t/test123",
-            tiempo_en_progreso="2 horas y 30 minutos"
+            tiempo_en_progreso="2 horas y 30 minutos",
+            tipo_alerta="sin_actualizar"
         )
 
         if resultado:
