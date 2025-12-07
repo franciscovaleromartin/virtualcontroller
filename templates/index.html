@@ -499,7 +499,7 @@
                         <option value="tiempo_total">Tiempo total de tarea</option>
                     </select>
                     <p style="font-size: 12px; color: #666; margin-top: 5px;" id="tipo-alerta-descripcion">
-                        Se enviará un email si no se actualiza el progreso en el tiempo configurado.
+                        Se enviará un email si la tarea en progreso no se actualiza en el tiempo configurado.
                     </p>
                 </div>
 
@@ -1057,10 +1057,10 @@
             const label = document.getElementById('tiempo-label');
 
             if (tipoAlerta === 'sin_actualizar') {
-                descripcion.textContent = 'Se enviará un email si no se actualiza el progreso en el tiempo configurado.';
+                descripcion.textContent = 'Se enviará un email si la tarea en progreso no se actualiza en el tiempo configurado.';
                 label.textContent = 'Tiempo sin actualización para enviar alerta:';
             } else if (tipoAlerta === 'tiempo_total') {
-                descripcion.textContent = 'Se enviará un email si el tiempo total de la tarea supera el tiempo configurado.';
+                descripcion.textContent = 'Se enviará un email si el tiempo total de la tarea en progreso supera el tiempo configurado.';
                 label.textContent = 'Tiempo total de tarea para enviar alerta:';
             }
         }

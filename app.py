@@ -132,6 +132,10 @@ def verificar_alertas_automaticamente():
                     tiempo_calculado = 0
                     tiempo_str = ""
 
+                    # Verificar que la tarea esté en progreso para ambos tipos de alerta
+                    if tarea_bd['status'] != 'en_progreso':
+                        continue
+
                     if tipo_alerta == 'sin_actualizar':
                         # Calcular tiempo desde la última actualización
                         tiempo_data = db.calculate_time_since_last_update(tarea_id)
@@ -142,9 +146,6 @@ def verificar_alertas_automaticamente():
                         tiempo_str = f"{horas} horas y {minutos} minutos sin actualizar"
 
                     else:  # tiempo_total
-                        # Solo verificar si está en progreso para tiempo total
-                        if tarea_bd['status'] != 'en_progreso':
-                            continue
 
                         tiempo_data = db.calculate_task_time_in_progress(tarea_id)
                         tiempo_calculado = tiempo_data['total_seconds']
@@ -1069,6 +1070,12 @@ def check_and_send_alert(task_id, task_name, task_url, date_updated, alert_confi
 
         print(f"📊 [STATUS] Estado actual de la tarea: {tarea_bd['status']}")
 
+        # Verificar que la tarea esté en progreso para ambos tipos de alerta
+        if tarea_bd['status'] != 'en_progreso':
+            print(f"ℹ️  [INFO] Tarea no está en 'en_progreso'. No se verifica alerta.")
+            print("="*80 + "\n")
+            return
+
         # Calcular tiempo según el tipo de alerta
         tiempo_calculado = 0
         tiempo_str = ""
@@ -1089,11 +1096,6 @@ def check_and_send_alert(task_id, task_name, task_url, date_updated, alert_confi
             print(f"⏱️  [CALC] Límite configurado: {horas_limite:.2f}h")
 
         else:  # tiempo_total
-            # Solo verificar si está en progreso para tiempo total
-            if tarea_bd['status'] != 'en_progreso':
-                print(f"ℹ️  [INFO] Tarea no está en 'en_progreso'. No se verifica alerta de tiempo total.")
-                print("="*80 + "\n")
-                return
 
             # Calcular el tiempo total en progreso usando el historial de estados
             print("⏱️  [CALC] Calculando tiempo total en progreso...")
