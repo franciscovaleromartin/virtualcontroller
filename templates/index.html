@@ -512,6 +512,10 @@
                     <label id="tiempo-label">Tiempo sin actualización para enviar alerta:</label>
                     <div class="inline-inputs">
                         <div style="display: flex; flex-direction: column; margin-right: 10px;">
+                            <label for="aviso-dias" style="font-size: 12px; margin-bottom: 3px; color: #666;">Días</label>
+                            <input type="number" id="aviso-dias" placeholder="0" min="0" value="0" style="width: 80px;">
+                        </div>
+                        <div style="display: flex; flex-direction: column; margin-right: 10px;">
                             <label for="aviso-horas" style="font-size: 12px; margin-bottom: 3px; color: #666;">Horas</label>
                             <input type="number" id="aviso-horas" placeholder="0" min="0" value="0" style="width: 80px;">
                         </div>
@@ -994,9 +998,20 @@
                         tr.className = 'tarea-en-progreso';
                     }
 
-                    const estadoAlerta = tarea.alerta && tarea.alerta.aviso_activado ?
-                        `Activa (${tarea.alerta.aviso_horas}h ${tarea.alerta.aviso_minutos}m)` :
-                        'Sin configurar';
+                    let estadoAlerta = 'Sin configurar';
+                    if (tarea.alerta && tarea.alerta.aviso_activado) {
+                        const dias = tarea.alerta.aviso_dias || 0;
+                        const horas = tarea.alerta.aviso_horas || 0;
+                        const minutos = tarea.alerta.aviso_minutos || 0;
+                        const tipoAlerta = tarea.alerta.tipo_alerta || 'sin_actualizar';
+
+                        const tiempoTexto = `${dias}d ${horas}h ${minutos}m`;
+                        const descripcion = tipoAlerta === 'sin_actualizar'
+                            ? 'desde la última actualización en progreso'
+                            : 'de tiempo máximo de progreso';
+
+                        estadoAlerta = `Activa (${tiempoTexto}) ${descripcion}`;
+                    }
 
                     tr.innerHTML = `
                         <td>
@@ -1071,6 +1086,7 @@
             const modalTareaId = document.getElementById('modal-tarea-id');
             const modalTareaNombre = document.getElementById('modal-tarea-nombre');
             const emailAviso = document.getElementById('email-aviso');
+            const avisoDias = document.getElementById('aviso-dias');
             const avisoHoras = document.getElementById('aviso-horas');
             const avisoMinutos = document.getElementById('aviso-minutos');
             const tipoAlerta = document.getElementById('tipo-alerta');
@@ -1085,6 +1101,7 @@
                 const alerta = await response.json();
 
                 emailAviso.value = alerta.email_aviso || '';
+                avisoDias.value = alerta.aviso_dias || 0;
                 avisoHoras.value = alerta.aviso_horas || 0;
                 avisoMinutos.value = alerta.aviso_minutos || 0;
                 tipoAlerta.value = alerta.tipo_alerta || 'sin_actualizar';
@@ -1092,6 +1109,7 @@
                 console.error('Error al cargar configuración de alerta:', error);
                 // Valores por defecto si hay error
                 emailAviso.value = '';
+                avisoDias.value = 0;
                 avisoHoras.value = 0;
                 avisoMinutos.value = 0;
                 tipoAlerta.value = 'sin_actualizar';
@@ -1120,6 +1138,7 @@
         async function activarAlerta() {
             const tareaId = document.getElementById('modal-tarea-id').value;
             const emailAviso = document.getElementById('email-aviso').value;
+            const avisoDias = parseInt(document.getElementById('aviso-dias').value) || 0;
             const avisoHoras = parseInt(document.getElementById('aviso-horas').value) || 0;
             const avisoMinutos = parseInt(document.getElementById('aviso-minutos').value) || 0;
             const tipoAlerta = document.getElementById('tipo-alerta').value;
@@ -1129,7 +1148,7 @@
                 alert('Por favor, ingresa un email para las notificaciones.');
                 return;
             }
-            if (avisoHoras === 0 && avisoMinutos === 0) {
+            if (avisoDias === 0 && avisoHoras === 0 && avisoMinutos === 0) {
                 alert('Por favor, ingresa un tiempo de aviso mayor a 0.');
                 return;
             }
@@ -1144,6 +1163,7 @@
                         tarea_id: tareaId,
                         aviso_activado: true,
                         email_aviso: emailAviso,
+                        aviso_dias: avisoDias,
                         aviso_horas: avisoHoras,
                         aviso_minutos: avisoMinutos,
                         tipo_alerta: tipoAlerta
@@ -1184,6 +1204,7 @@
                         tarea_id: tareaId,
                         aviso_activado: false,
                         email_aviso: '',
+                        aviso_dias: 0,
                         aviso_horas: 0,
                         aviso_minutos: 0,
                         tipo_alerta: tipoAlerta

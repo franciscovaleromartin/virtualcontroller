@@ -128,7 +128,7 @@ def verificar_alertas_automaticamente():
                         continue
 
                     # Calcular tiempo según el tipo de alerta
-                    tiempo_max_segundos = (alerta['aviso_horas'] * 3600) + (alerta['aviso_minutos'] * 60)
+                    tiempo_max_segundos = (alerta.get('aviso_dias', 0) * 86400) + (alerta['aviso_horas'] * 3600) + (alerta['aviso_minutos'] * 60)
                     tiempo_calculado = 0
                     tiempo_str = ""
 
@@ -1040,17 +1040,18 @@ def check_and_send_alert(task_id, task_name, task_url, date_updated, alert_confi
         print("="*80)
 
         # Obtener configuración de la alerta
+        tiempo_max_dias = alert_config.get('aviso_dias', 0)
         tiempo_max_horas = alert_config.get('aviso_horas', 0)
         tiempo_max_minutos = alert_config.get('aviso_minutos', 0)
         email_destino = alert_config.get('email_aviso')
         tipo_alerta = alert_config.get('tipo_alerta', 'sin_actualizar')
 
         print(f"⚙️  [CONFIG] Tipo de alerta: {tipo_alerta}")
-        print(f"⚙️  [CONFIG] Límite configurado: {tiempo_max_horas}h {tiempo_max_minutos}m")
+        print(f"⚙️  [CONFIG] Límite configurado: {tiempo_max_dias}d {tiempo_max_horas}h {tiempo_max_minutos}m")
         print(f"📧 [CONFIG] Email destino: {email_destino}")
 
         # Validar configuración
-        tiempo_max_segundos = (tiempo_max_horas * 3600) + (tiempo_max_minutos * 60)
+        tiempo_max_segundos = (tiempo_max_dias * 86400) + (tiempo_max_horas * 3600) + (tiempo_max_minutos * 60)
         if tiempo_max_segundos <= 0:
             print(f"⚠️  [WARNING] Tarea {task_id} tiene tiempo máximo de 0. Saltando...")
             print("="*80 + "\n")
@@ -1790,17 +1791,19 @@ def guardar_alerta_tarea():
         tarea_id = data['tarea_id']
         aviso_activado = data.get('aviso_activado', False)
         email_aviso = data.get('email_aviso', '')
+        aviso_dias = int(data.get('aviso_dias', 0))
         aviso_horas = int(data.get('aviso_horas', 0))
         aviso_minutos = int(data.get('aviso_minutos', 0))
         tipo_alerta = data.get('tipo_alerta', 'sin_actualizar')
 
         # Guardar en base de datos
-        db.save_task_alert(tarea_id, aviso_activado, email_aviso, aviso_horas, aviso_minutos, tipo_alerta)
+        db.save_task_alert(tarea_id, aviso_activado, email_aviso, aviso_dias, aviso_horas, aviso_minutos, tipo_alerta)
 
         # Mantener también en memoria para compatibilidad
         alertas_tareas[tarea_id] = {
             'aviso_activado': aviso_activado,
             'email_aviso': email_aviso,
+            'aviso_dias': aviso_dias,
             'aviso_horas': aviso_horas,
             'aviso_minutos': aviso_minutos,
             'tipo_alerta': tipo_alerta,
@@ -1831,6 +1834,7 @@ def obtener_alerta_tarea_endpoint(tarea_id):
             alerta = {
                 'aviso_activado': False,
                 'email_aviso': '',
+                'aviso_dias': 0,
                 'aviso_horas': 0,
                 'aviso_minutos': 0,
                 'tipo_alerta': 'sin_actualizar'
@@ -1984,6 +1988,7 @@ def verificar_alertas():
             tarea_nombre = alerta['task_name']
             tarea_url = alerta['task_url']
             email_destino = alerta['email_aviso']
+            tiempo_max_dias = alerta.get('aviso_dias', 0)
             tiempo_max_horas = alerta['aviso_horas']
             tiempo_max_minutos = alerta['aviso_minutos']
             tipo_alerta = alerta.get('tipo_alerta', 'sin_actualizar')
@@ -1991,7 +1996,7 @@ def verificar_alertas():
             print(f"\n[INFO] Verificando alerta para tarea: {tarea_nombre} (ID: {tarea_id})")
 
             # Calcular el tiempo máximo configurado en segundos
-            tiempo_max_segundos = (tiempo_max_horas * 3600) + (tiempo_max_minutos * 60)
+            tiempo_max_segundos = (tiempo_max_dias * 86400) + (tiempo_max_horas * 3600) + (tiempo_max_minutos * 60)
 
             if tiempo_max_segundos <= 0:
                 print(f"[WARNING] Tarea {tarea_id} tiene tiempo máximo de 0. Saltando...")
@@ -2185,7 +2190,7 @@ def debug_verificar_alertas_ahora():
                     continue
 
                 # Calcular tiempo
-                tiempo_max_segundos = (alerta['aviso_horas'] * 3600) + (alerta['aviso_minutos'] * 60)
+                tiempo_max_segundos = (alerta.get('aviso_dias', 0) * 86400) + (alerta['aviso_horas'] * 3600) + (alerta['aviso_minutos'] * 60)
                 tiempo_data = db.calculate_task_time_in_progress(tarea_id)
                 tiempo_en_progreso = tiempo_data['total_seconds']
 
