@@ -1,215 +1,235 @@
 # Virtual Controller SIDN
 
-Sistema de monitoreo y alertas para tareas de ClickUp.
+## ¿Qué es?
 
-## Características
+**Virtual Controller** es un sistema de monitoreo inteligente y alertas automáticas para proyectos de ClickUp. Funciona como un "vigilante" que te avisa cuando tus tareas llevan demasiado tiempo sin actualizarse, ayudándote a mantener tus proyectos en movimiento.
 
-- **Autenticación OAuth con ClickUp**: Integración segura con tu cuenta de ClickUp
-- **Selector de Proyectos**: Navega por espacios, carpetas y listas de manera jerárquica
-- **Visualización de Tareas**: Muestra todas las tareas de tus proyectos de ClickUp con:
-  - Estado actual (completada, en progreso, pendiente)
-  - Tiempo trabajado en cada tarea (horas y minutos)
-  - Última actualización
-  - Tiempo total del trabajo
-- **Sistema de Alertas Automáticas**: Configura alertas por email para tareas que no han sido actualizadas
-- **Monitoreo en Tiempo Real**: Verificación periódica automática de tareas
+Es una aplicación web Flask que se conecta a tu cuenta de ClickUp y te permite:
+- Visualizar todas tus tareas con el tiempo real que has trabajado en ellas
+- Configurar alertas personalizadas por email para cada tarea
+- Recibir notificaciones automáticas cuando una tarea necesita atención
+- Integrar webhooks para sincronización en tiempo real con ClickUp
 
-## Requisitos
+## ¿Por qué debería importarte?
 
-- Python 3.8+
-- Cuenta de ClickUp con API OAuth configurada
-- Cuenta de email para envío de alertas (opcional)
+### 🚀 Problemas que resuelve
 
-## Instalación
+**¿Te suena familiar alguno de estos escenarios?**
 
-1. Clona el repositorio:
-```bash
-git clone <repository-url>
-cd virtualcontroller
-```
+- ❌ Tareas importantes que se quedan olvidadas durante días o semanas
+- ❌ Pérdida de tiempo revisando manualmente ClickUp para ver qué tareas están estancadas
+- ❌ Falta de visibilidad del tiempo real trabajado en cada tarea
+- ❌ Necesidad de recordar manualmente hacer seguimiento de tareas críticas
+- ❌ Clientes o stakeholders preguntando por tareas que llevan tiempo sin moverse
 
-2. Instala las dependencias:
-```bash
-pip install -r requirements.txt
-```
+**Virtual Controller soluciona todo esto automáticamente:**
 
-3. Configura las variables de entorno:
-```bash
-cp .env.example .env
-# Edita .env con tus credenciales
-```
+- ✅ **Alertas automáticas**: Recibes un email cuando una tarea lleva X tiempo sin actualizarse
+- ✅ **Ahorro de tiempo**: No más revisiones manuales constantes de ClickUp
+- ✅ **Visibilidad real**: Ve exactamente cuánto tiempo se ha trabajado en cada tarea (solo cuando está "In Progress")
+- ✅ **Proactividad**: Actúa antes de que los problemas se conviertan en crisis
+- ✅ **Sincronización en tiempo real**: Con webhooks, los cambios en ClickUp se reflejan instantáneamente
 
-4. Ejecuta la aplicación:
-```bash
-python app.py
-```
+### 💡 Casos de uso ideales
 
-## Configuración
+- **Project Managers**: Mantén todos los proyectos activos sin tareas abandonadas
+- **Equipos de desarrollo**: Asegúrate de que ningún bug o tarea quede olvidada
+- **Agencias**: Monitorea múltiples proyectos de clientes simultáneamente
+- **Freelancers**: Ten control total de tu carga de trabajo y tiempos
+- **Cualquiera que use ClickUp**: Y quiera ser más productivo sin esfuerzo extra
 
-### Variables de Entorno
+## ¿Cómo se usa?
 
-Edita el archivo `.env` con las siguientes variables:
+### Instalación rápida
 
-- `CLICKUP_CLIENT_ID`: ID de tu aplicación OAuth de ClickUp
-- `CLICKUP_CLIENT_SECRET`: Secret de tu aplicación OAuth
-- `SMTP_SERVER`: Servidor SMTP para envío de emails (por defecto: smtp.gmail.com)
-- `SMTP_PORT`: Puerto SMTP (por defecto: 587)
-- `SMTP_EMAIL`: Email desde el cual se enviarán las alertas
-- `SMTP_PASSWORD`: Contraseña del email (se recomienda usar App Password de Gmail)
-- `WEBHOOK_SECRET_TOKEN`: Token de seguridad para validar webhooks de make.com (opcional pero recomendado)
-- `DATABASE_PATH`: Ruta al archivo de base de datos SQLite (por defecto: virtualcontroller.db)
+1. **Clona el repositorio**:
+   ```bash
+   git clone <repository-url>
+   cd virtualcontroller
+   ```
 
-### Configuración de ClickUp OAuth
+2. **Instala las dependencias**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Configura tus credenciales**:
+   ```bash
+   cp .env.example .env
+   # Edita .env con tus credenciales (ver sección de configuración abajo)
+   ```
+
+4. **Ejecuta la aplicación**:
+   ```bash
+   python app.py
+   ```
+
+5. **Abre tu navegador** en `http://localhost:5000`
+
+### Configuración inicial
+
+#### 1. Configurar ClickUp OAuth
 
 1. Ve a https://app.clickup.com/settings/apps
 2. Crea una nueva aplicación OAuth
-3. Configura la URL de redirección (Redirect URL):
-   - **Para producción**: `https://virtualcontroller.onrender.com`
-   - **Para desarrollo local**: `http://localhost:5000`
-   - **Importante**: Sin `/` al final, sin `/callback` ni ningún subdirectorio
-4. Copia el Client ID y Client Secret al archivo .env
+3. Configura la **Redirect URL**:
+   - **Desarrollo local**: `http://localhost:5000`
+   - **Producción**: `https://tu-dominio.com`
+   - ⚠️ **Importante**: Sin `/` al final, sin `/callback` ni subdirectorios
+4. Copia el `Client ID` y `Client Secret` al archivo `.env`:
+   ```env
+   CLICKUP_CLIENT_ID=tu_client_id
+   CLICKUP_CLIENT_SECRET=tu_client_secret
+   ```
 
-### Configuración de Email (Gmail)
+#### 2. Configurar Email para Alertas (Gmail)
 
-Para usar Gmail como servidor SMTP:
+1. Activa la **verificación en dos pasos** en tu cuenta de Gmail
+2. Genera una **Contraseña de Aplicación** en https://myaccount.google.com/apppasswords
+3. Configura en tu `.env`:
+   ```env
+   SMTP_SERVER=smtp.gmail.com
+   SMTP_PORT=587
+   SMTP_EMAIL=tu-email@gmail.com
+   SMTP_PASSWORD=tu_contraseña_de_aplicacion
+   ```
 
-1. Activa la verificación en dos pasos en tu cuenta de Gmail
-2. Genera una "Contraseña de Aplicación" en https://myaccount.google.com/apppasswords
-3. Usa esa contraseña en `SMTP_PASSWORD`
+#### 3. Variables de entorno completas
 
-## Uso
+Edita el archivo `.env` con todas estas variables:
 
-### Visualizar Tareas
+```env
+# ClickUp OAuth
+CLICKUP_CLIENT_ID=tu_client_id
+CLICKUP_CLIENT_SECRET=tu_client_secret
 
-1. Selecciona un espacio (Space) de ClickUp
-2. Selecciona un proyecto (Carpeta o Lista)
-3. Se mostrarán todas las tareas del proyecto con su tiempo trabajado
+# Email (SMTP)
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+SMTP_EMAIL=tu-email@gmail.com
+SMTP_PASSWORD=tu_contraseña_de_aplicacion
 
-### Configurar Alertas por Tarea
+# Webhook (opcional pero recomendado)
+WEBHOOK_SECRET_TOKEN=genera_un_token_aleatorio_aqui
 
-1. Selecciona un espacio (Space) de ClickUp
-2. Selecciona un proyecto
-3. Haz clic en el botón "Configurar" de cualquier tarea
-4. En el modal de configuración:
-   - Activa el checkbox "Activar aviso de demora"
-   - Ingresa el email donde recibirás las alertas
-   - Configura el tiempo (horas y minutos) sin actualización para enviar alerta
-5. Haz clic en "Guardar"
+# Base de datos (opcional, tiene un default)
+DATABASE_PATH=virtualcontroller.db
+```
 
-### Integración con Webhooks (Make.com)
+### Uso básico
 
-El sistema incluye un endpoint webhook robusto que permite recibir actualizaciones en tiempo real desde ClickUp (directamente o a través de make.com).
+#### Visualizar tus tareas
 
-**Eventos soportados:**
-- `taskCreated`, `taskUpdated`, `taskDeleted`, `taskStatusUpdated`
-- `listCreated`, `listUpdated`, `listDeleted`
-- `folderCreated`, `folderUpdated`, `folderDeleted`
-- `spaceCreated`, `spaceUpdated`
+1. **Inicia sesión** con tu cuenta de ClickUp (OAuth)
+2. **Selecciona un Space** (espacio) de ClickUp
+3. **Selecciona un proyecto** (carpeta o lista)
+4. 🎉 **¡Listo!** Verás todas tus tareas con:
+   - Estado actual (completada, en progreso, pendiente)
+   - Tiempo trabajado (solo cuando está "In Progress")
+   - Última actualización
+   - Tiempo total del proyecto
 
-#### Configuración del Webhook
+#### Configurar alertas para una tarea
+
+1. Haz clic en el botón **"Configurar"** de cualquier tarea
+2. En el modal:
+   - ✅ Activa **"Activar aviso de demora"**
+   - 📧 Ingresa el **email** donde recibirás alertas
+   - ⏰ Configura el **tiempo sin actualización** (horas y minutos) para enviar la alerta
+3. Haz clic en **"Guardar"**
+4. 🔔 Ahora recibirás un email si la tarea no se actualiza en el tiempo configurado
+
+#### Cómo funcionan las alertas
+
+- ✅ Verificación automática cada **5 minutos**
+- ✅ Email de alerta cuando la tarea no se actualiza en el tiempo configurado
+- ✅ **Máximo 1 email por día** por tarea (evita spam)
+- ✅ El email incluye un **enlace directo** a la tarea en ClickUp
+- ✅ Las alertas se desactivan automáticamente después de enviar el email
+
+## Características avanzadas
+
+### 🔗 Integración con Webhooks (Make.com)
+
+Los webhooks permiten que Virtual Controller reciba actualizaciones en **tiempo real** desde ClickUp, sin necesidad de consultar constantemente la API.
+
+#### Ventajas de usar webhooks
+
+- ⚡ **Actualizaciones instantáneas** sin polling constante
+- 💰 **Menor uso de la API** de ClickUp (evita límites)
+- 🔔 **Alertas más rápidas** cuando las tareas cambian
+- 📦 **Caché local** de tareas para consultas ultra-rápidas
+- 💾 **Persistencia automática** en base de datos SQLite
+
+#### Configuración de webhooks
 
 1. **Genera un token de seguridad**:
    ```bash
-   # En Linux/Mac:
    openssl rand -hex 32
-
-   # O usa cualquier generador de tokens aleatorios
    ```
 
-2. **Configura el token** en tu archivo `.env`:
-   ```
-   WEBHOOK_SECRET_TOKEN=tu_token_secreto_aqui
+2. **Agrega el token a tu `.env`**:
+   ```env
+   WEBHOOK_SECRET_TOKEN=tu_token_secreto_generado
    ```
 
 3. **Configura Make.com**:
    - Crea un nuevo escenario en make.com
-   - Conecta el trigger de ClickUp (cuando una tarea se actualiza)
-   - Agrega un módulo HTTP para hacer una petición POST a tu webhook
-   - URL del webhook: `https://tu-dominio.com/webhook/clickup?token=tu_token_secreto`
-   - O alternativamente, envía el token en el header `X-Webhook-Token`
+   - Conecta el trigger de ClickUp (ej: "cuando una tarea se actualiza")
+   - Agrega un módulo HTTP para hacer POST a:
+     ```
+     https://tu-dominio.com/webhook/clickup?token=tu_token_secreto
+     ```
+   - O envía el token en el header `X-Webhook-Token`
 
-#### Formato del Payload
+4. **Formato del payload** que debe enviar Make.com:
+   ```json
+   {
+     "task_id": "abc123",
+     "task_name": "Nombre de la tarea",
+     "status": "in progress",
+     "date_updated": 1234567890000,
+     "url": "https://app.clickup.com/t/...",
+     "event_type": "taskUpdated",
+     "horas_trabajadas": 5,
+     "minutos_trabajados": 30
+   }
+   ```
 
-El webhook espera recibir un JSON con el siguiente formato:
+#### Endpoints disponibles
 
-```json
-{
-  "task_id": "abc123",
-  "task_name": "Nombre de la tarea",
-  "status": "in progress",
-  "date_updated": 1234567890000,
-  "url": "https://app.clickup.com/t/...",
-  "event_type": "taskUpdated",
-  "horas_trabajadas": 5,
-  "minutos_trabajados": 30
-}
-```
+- **POST /webhook/clickup** - Recibe webhooks de ClickUp
+- **GET /api/webhook/tasks/cache** - Consulta el caché de tareas
+  - Opcional: `?task_id=abc123` para una tarea específica
+- **DELETE /api/webhook/tasks/cache** - Limpia el caché (útil para testing)
+- **GET /api/webhook/stats** - Estadísticas de webhooks procesados
 
-**Campos requeridos:**
-- `task_id`: ID de la tarea en ClickUp
-- `task_name`: Nombre de la tarea
-- `status`: Estado actual de la tarea
-- `date_updated`: Timestamp de la última actualización (en milisegundos)
-- `url`: URL de la tarea en ClickUp
+#### Eventos soportados
 
-**Campos opcionales:**
-- `event_type`: Tipo de evento (taskUpdated, taskCreated, etc.)
-- `horas_trabajadas`: Horas trabajadas en la tarea
-- `minutos_trabajados`: Minutos trabajados en la tarea
+- ✅ `taskCreated`, `taskUpdated`, `taskDeleted`, `taskStatusUpdated`
+- ✅ `listCreated`, `listUpdated`, `listDeleted`
+- ✅ `folderCreated`, `folderUpdated`, `folderDeleted`
+- ✅ `spaceCreated`, `spaceUpdated`
 
-#### Endpoints del Webhook
+### 💾 Persistencia de datos (SQLite)
 
-- **POST /webhook/clickup**: Recibe y procesa webhooks de ClickUp
-  - Guarda eventos en base de datos
-  - Actualiza automáticamente spaces, folders, lists y tasks
-  - Procesa alertas configuradas
-- **GET /api/webhook/tasks/cache**: Consulta el caché en memoria de tareas actualizadas
-  - Parámetro opcional: `?task_id=abc123` para obtener una tarea específica
-- **DELETE /api/webhook/tasks/cache**: Limpia el caché en memoria (útil para testing)
-- **GET /api/webhook/stats**: Obtiene estadísticas de webhooks procesados
-  - Muestra total de eventos por tipo
-  - Cuenta eventos procesados correctamente y con errores
-
-#### Ventajas del Webhook
-
-- ✅ Actualizaciones en tiempo real sin polling constante
-- ✅ Menor uso de la API de ClickUp
-- ✅ Alertas instantáneas cuando las tareas cambian
-- ✅ Caché local de tareas para consultas rápidas
-- ✅ Persistencia de datos en base de datos SQLite
-
-### Persistencia de Datos
-
-El sistema utiliza SQLite para almacenar todos los datos de forma persistente:
+Virtual Controller almacena todos los datos localmente en una base de datos SQLite:
 
 **Tablas principales:**
-- `spaces`: Espacios de ClickUp
-- `folders`: Carpetas dentro de espacios
-- `lists`: Listas de tareas
-- `tasks`: Tareas con toda su información (estado, fechas, tiempos, etc.)
-- `task_alerts`: Configuración de alertas por tarea
-- `webhooks_log`: Log de todos los webhooks recibidos para auditoría
+- `spaces` - Espacios de ClickUp
+- `folders` - Carpetas dentro de espacios
+- `lists` - Listas de tareas
+- `tasks` - Tareas completas (estado, fechas, tiempos, etc.)
+- `task_alerts` - Configuración de alertas
+- `webhooks_log` - Log de todos los webhooks recibidos
 
-**Características:**
-- ✅ Datos persisten entre reinicios del servidor
-- ✅ Sincronización automática con webhooks de ClickUp
+**Ventajas:**
+- ✅ Datos persisten entre reinicios
+- ✅ Sincronización automática con webhooks
 - ✅ Log completo de eventos para debugging
-- ✅ Estadísticas de webhooks procesados
-- ✅ Relaciones entre tablas con CASCADE para integridad de datos
+- ✅ No requiere configuración manual
 
-**Ubicación del archivo:**
-- El archivo de base de datos se crea en la ruta especificada en `DATABASE_PATH` (por defecto: `virtualcontroller.db`)
-- Se inicializa automáticamente al arrancar la aplicación
-- No requiere configuración manual
-
-### Cómo Funcionan las Alertas
-
-- El sistema verifica automáticamente cada 5 minutos las tareas con alertas activas
-- Si una tarea no ha sido actualizada en el tiempo configurado, se envía un email de alerta
-- Las alertas no se envían más de una vez por día para evitar spam
-- El email incluye un enlace directo a la tarea en ClickUp
-
-## Estructura del Proyecto
+## Estructura del proyecto
 
 ```
 virtualcontroller/
@@ -217,41 +237,108 @@ virtualcontroller/
 ├── db.py                     # Módulo de persistencia con SQLite
 ├── templates/
 │   └── index.html           # Interfaz de usuario
-├── .env                     # Variables de entorno (no incluido en git)
+├── .env                     # Variables de entorno (no en git)
 ├── .env.example             # Plantilla de variables de entorno
 ├── requirements.txt         # Dependencias Python
-├── virtualcontroller.db     # Base de datos SQLite (generado automáticamente)
+├── virtualcontroller.db     # Base de datos SQLite (auto-generado)
 └── README.md               # Este archivo
 ```
 
-## Notas Técnicas
+## Requisitos del sistema
 
-- **Persistencia de datos**: Todos los datos (tareas, alertas, webhooks) se almacenan en SQLite
-- **Caché en memoria**: Se mantiene un caché adicional para acceso ultra-rápido a tareas recientes
-- El tiempo trabajado se calcula **solo cuando la tarea está en estado "In Progress"**:
-  - El sistema analiza el historial de cambios de estado de cada tarea
-  - Suma todos los períodos en los que la tarea estuvo en "In Progress"
-  - Si la tarea cambia a "To Do" o "Complete", el contador se detiene
-  - Si vuelve a "In Progress", el contador continúa desde donde estaba
-  - Esto permite saber el tiempo real dedicado a trabajar en cada tarea
-- El sistema suma automáticamente todo el tiempo trabajado en las tareas para mostrar un total del proyecto
-- El sistema soporta múltiples usuarios simultáneos con sesiones independientes
-- La verificación de alertas se realiza desde el frontend usando el token del usuario activo
+- **Python** 3.8 o superior
+- **Cuenta de ClickUp** con API OAuth configurada
+- **Cuenta de email** para envío de alertas (Gmail recomendado)
+- **Make.com** (opcional, para webhooks)
 
-## Solución de Problemas
+## Notas técnicas importantes
 
-### Las alertas no se envían
+### Cálculo del tiempo trabajado
 
-- Verifica que las credenciales SMTP en `.env` sean correctas
-- Asegúrate de usar una "Contraseña de Aplicación" si usas Gmail
-- Revisa los logs del servidor para ver mensajes de error
+El sistema calcula el tiempo trabajado **solo cuando la tarea está en estado "In Progress"**:
 
-### No aparecen las tareas
+1. Analiza el historial de cambios de estado de cada tarea
+2. Suma todos los períodos en los que la tarea estuvo "In Progress"
+3. Si la tarea cambia a "To Do" o "Complete", el contador se detiene
+4. Si vuelve a "In Progress", el contador continúa desde donde estaba
 
-- Verifica que tu token de ClickUp sea válido
-- Asegúrate de tener permisos para acceder al espacio seleccionado
-- Revisa la consola del navegador para ver errores de API
+Esto permite saber el **tiempo real dedicado** a trabajar en cada tarea.
+
+### Arquitectura
+
+- **Backend**: Flask (Python)
+- **Base de datos**: SQLite con módulo `db.py`
+- **Frontend**: HTML/JavaScript con Bootstrap
+- **Autenticación**: OAuth 2.0 con ClickUp
+- **Alertas**: SMTP (Gmail o cualquier servidor compatible)
+- **Scheduler**: APScheduler para verificaciones periódicas
+
+### Seguridad
+
+- ✅ Tokens de webhook para validar requests
+- ✅ Sesiones de usuario independientes
+- ✅ Credenciales en variables de entorno (nunca en código)
+- ✅ OAuth 2.0 para autenticación segura
+
+## Solución de problemas
+
+### ❌ Las alertas no se envían
+
+**Posibles causas:**
+- Credenciales SMTP incorrectas en `.env`
+- No estás usando una "Contraseña de Aplicación" en Gmail
+- Firewall bloqueando puerto 587
+
+**Solución:**
+1. Verifica las credenciales en `.env`
+2. Genera una nueva Contraseña de Aplicación en Gmail
+3. Revisa los logs del servidor para ver errores específicos
+
+### ❌ No aparecen las tareas
+
+**Posibles causas:**
+- Token de ClickUp expirado o inválido
+- Sin permisos para acceder al espacio seleccionado
+- Error en la configuración de OAuth
+
+**Solución:**
+1. Cierra sesión y vuelve a autenticarte
+2. Verifica que tienes permisos en ClickUp para ese espacio
+3. Revisa la consola del navegador (F12) para ver errores de API
+
+### ❌ Webhooks no funcionan
+
+**Posibles causas:**
+- Token de webhook incorrecto
+- Formato de payload incorrecto desde Make.com
+- URL del webhook incorrecta
+
+**Solución:**
+1. Verifica que el token en `.env` coincida con el de Make.com
+2. Revisa el formato del payload en la documentación arriba
+3. Consulta `/api/webhook/stats` para ver si los webhooks llegan
 
 ## Contribuciones
 
-Las contribuciones son bienvenidas. Por favor, abre un issue primero para discutir los cambios propuestos
+Las contribuciones son bienvenidas. Por favor:
+1. Abre un **issue** primero para discutir los cambios propuestos
+2. Haz un **fork** del proyecto
+3. Crea una **rama** para tu feature (`git checkout -b feature/AmazingFeature`)
+4. Haz **commit** de tus cambios (`git commit -m 'Add some AmazingFeature'`)
+5. Haz **push** a la rama (`git push origin feature/AmazingFeature`)
+6. Abre un **Pull Request**
+
+## Licencia
+
+Este proyecto es de código abierto y está disponible bajo la licencia que decidas aplicar.
+
+## Soporte
+
+Si tienes problemas o preguntas:
+- 🐛 Abre un **issue** en GitHub
+- 📧 Contacta al equipo de desarrollo
+- 📖 Consulta la **documentación** en este README
+
+---
+
+**Hecho con ❤️ para hacer la gestión de proyectos más fácil y automatizada**
