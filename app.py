@@ -119,43 +119,62 @@ def verificar_alertas_automaticamente():
             for alerta in alertas_activas:
                 tarea_id = alerta['task_id']
                 tarea_nombre = alerta['task_name']
+                tipo_alerta = alerta.get('tipo_alerta', 'sin_actualizar')
 
                 try:
                     # Obtener tarea de BD
                     tarea_bd = db.get_task(tarea_id)
-                    if not tarea_bd or tarea_bd['status'] != 'en_progreso':
+                    if not tarea_bd:
                         continue
 
-                    # Calcular tiempo
+                    # Calcular tiempo según el tipo de alerta
                     tiempo_max_segundos = (alerta['aviso_horas'] * 3600) + (alerta['aviso_minutos'] * 60)
-                    tiempo_data = db.calculate_task_time_in_progress(tarea_id)
-                    tiempo_en_progreso = tiempo_data['total_seconds']
+                    tiempo_calculado = 0
+                    tiempo_str = ""
 
-                    # Sumar sesión actual si aplica
-                    if tiempo_data['is_currently_in_progress'] and tiempo_data['current_session_start']:
-                        try:
-                            session_start = datetime.fromisoformat(tiempo_data['current_session_start'])
-                            from datetime import timezone
-                            now = datetime.now(timezone.utc)
-                            tiempo_sesion = (now - session_start).total_seconds()
-                            tiempo_en_progreso += tiempo_sesion
-                        except:
-                            pass
+                    # Verificar que la tarea esté en progreso para ambos tipos de alerta
+                    if tarea_bd['status'] != 'en_progreso':
+                        continue
+
+                    if tipo_alerta == 'sin_actualizar':
+                        # Calcular tiempo desde la última actualización
+                        tiempo_data = db.calculate_time_since_last_update(tarea_id)
+                        tiempo_calculado = tiempo_data['seconds_since_update']
+
+                        horas = int(tiempo_calculado // 3600)
+                        minutos = int((tiempo_calculado % 3600) // 60)
+                        tiempo_str = f"{horas} horas y {minutos} minutos sin actualizar"
+
+                    else:  # tiempo_total
+
+                        tiempo_data = db.calculate_task_time_in_progress(tarea_id)
+                        tiempo_calculado = tiempo_data['total_seconds']
+
+                        # Sumar sesión actual si aplica
+                        if tiempo_data['is_currently_in_progress'] and tiempo_data['current_session_start']:
+                            try:
+                                session_start = datetime.fromisoformat(tiempo_data['current_session_start'])
+                                from datetime import timezone
+                                now = datetime.now(timezone.utc)
+                                tiempo_sesion = (now - session_start).total_seconds()
+                                tiempo_calculado += tiempo_sesion
+                            except:
+                                pass
+
+                        horas = int(tiempo_calculado // 3600)
+                        minutos = int((tiempo_calculado % 3600) // 60)
+                        tiempo_str = f"{horas} horas y {minutos} minutos en progreso"
 
                     # Verificar si superó el límite (con margen de 30s)
                     MARGEN_TOLERANCIA = 30
-                    if tiempo_en_progreso >= (tiempo_max_segundos - MARGEN_TOLERANCIA):
-                        print(f"🚨 [SCHEDULER] Alerta activada para tarea: {tarea_nombre}")
-
-                        horas = int(tiempo_en_progreso // 3600)
-                        minutos = int((tiempo_en_progreso % 3600) // 60)
-                        tiempo_str = f"{horas} horas y {minutos} minutos"
+                    if tiempo_calculado >= (tiempo_max_segundos - MARGEN_TOLERANCIA):
+                        print(f"🚨 [SCHEDULER] Alerta activada para tarea: {tarea_nombre} (tipo: {tipo_alerta})")
 
                         proyecto_nombre = db.get_task_project_name(tarea_id)
                         tarea_url = alerta['task_url']
 
                         # Enviar email
-                        if enviar_email_alerta(alerta['email_aviso'], tarea_nombre, proyecto_nombre, tarea_url, tiempo_str):
+                        if enviar_email_alerta(alerta['email_aviso'], tarea_nombre, proyecto_nombre, tarea_url, tiempo_str, tipo_alerta):
                             print(f"✅ [SCHEDULER] Email enviado para: {tarea_nombre}")
                             db.deactivate_task_alert(tarea_id)
                             alertas_enviadas += 1
@@ -1013,7 +1032,7 @@ def process_space_event(event_type, data):
 
 
 def check_and_send_alert(task_id, task_name, task_url, date_updated, alert_config):
-    """Verifica y envía alerta si es necesario basándose en el tiempo total en progreso"""
+    """Verifica y envía alerta si es necesario basándose en el tipo de alerta configurado"""
     try:
         print("\n" + "="*80)
         print(f"🔔 [ALERTA] Verificando alerta para: {task_name}")
@@ -1024,7 +1043,9 @@ def check_and_send_alert(task_id, task_name, task_url, date_updated, alert_confi
         tiempo_max_horas = alert_config.get('aviso_horas', 0)
         tiempo_max_minutos = alert_config.get('aviso_minutos', 0)
         email_destino = alert_config.get('email_aviso')
+        tipo_alerta = alert_config.get('tipo_alerta', 'sin_actualizar')
 
+        print(f"⚙️  [CONFIG] Tipo de alerta: {tipo_alerta}")
         print(f"⚙️  [CONFIG] Límite configurado: {tiempo_max_horas}h {tiempo_max_minutos}m")
         print(f"📧 [CONFIG] Email destino: {email_destino}")
 
@@ -1047,55 +1068,76 @@ def check_and_send_alert(task_id, task_name, task_url, date_updated, alert_confi
             print("="*80 + "\n")
             return
 
-        # Verificar si la tarea está actualmente en progreso
         print(f"📊 [STATUS] Estado actual de la tarea: {tarea_bd['status']}")
+
+        # Verificar que la tarea esté en progreso para ambos tipos de alerta
         if tarea_bd['status'] != 'en_progreso':
             print(f"ℹ️  [INFO] Tarea no está en 'en_progreso'. No se verifica alerta.")
             print("="*80 + "\n")
             return
 
-        # Calcular el tiempo total en progreso usando el historial de estados
-        print("⏱️  [CALC] Calculando tiempo total en progreso...")
-        tiempo_data = db.calculate_task_time_in_progress(task_id)
-        tiempo_en_progreso_segundos = tiempo_data['total_seconds']
+        # Calcular tiempo según el tipo de alerta
+        tiempo_calculado = 0
+        tiempo_str = ""
 
-        # Si está actualmente en progreso, sumar el tiempo de la sesión actual
-        if tiempo_data['is_currently_in_progress'] and tiempo_data['current_session_start']:
-            try:
-                session_start = datetime.fromisoformat(tiempo_data['current_session_start'])
-                # Usar datetime.now() con timezone UTC para poder restar
-                from datetime import timezone
-                now = datetime.now(timezone.utc)
-                tiempo_sesion_actual = (now - session_start).total_seconds()
-                tiempo_en_progreso_segundos += tiempo_sesion_actual
-                print(f"⏱️  [CALC] Sesión actual: +{tiempo_sesion_actual/3600:.2f}h")
-            except Exception as e:
-                print(f"⚠️  [WARNING] Error al calcular sesión actual: {str(e)}")
-                # Fallback: intentar sin timezone
+        if tipo_alerta == 'sin_actualizar':
+            # Calcular tiempo desde la última actualización
+            print("⏱️  [CALC] Calculando tiempo sin actualizar...")
+            tiempo_data = db.calculate_time_since_last_update(task_id)
+            tiempo_calculado = tiempo_data['seconds_since_update']
+
+            horas = int(tiempo_calculado // 3600)
+            minutos = int((tiempo_calculado % 3600) // 60)
+            tiempo_str = f"{horas} horas y {minutos} minutos sin actualizar"
+
+            horas_actuales = tiempo_calculado / 3600
+            horas_limite = tiempo_max_segundos / 3600
+            print(f"⏱️  [CALC] Tiempo sin actualizar: {horas_actuales:.2f}h")
+            print(f"⏱️  [CALC] Límite configurado: {horas_limite:.2f}h")
+
+        else:  # tiempo_total
+
+            # Calcular el tiempo total en progreso usando el historial de estados
+            print("⏱️  [CALC] Calculando tiempo total en progreso...")
+            tiempo_data = db.calculate_task_time_in_progress(task_id)
+            tiempo_calculado = tiempo_data['total_seconds']
+
+            # Si está actualmente en progreso, sumar el tiempo de la sesión actual
+            if tiempo_data['is_currently_in_progress'] and tiempo_data['current_session_start']:
                 try:
-                    session_start_naive = datetime.fromisoformat(tiempo_data['current_session_start'].replace('+00:00', '').replace('Z', ''))
-                    tiempo_sesion_actual = (datetime.utcnow() - session_start_naive).total_seconds()
-                    tiempo_en_progreso_segundos += tiempo_sesion_actual
-                    print(f"⏱️  [CALC] Sesión actual (fallback): +{tiempo_sesion_actual/3600:.2f}h")
-                except Exception as e2:
-                    print(f"⚠️  [ERROR] No se pudo calcular tiempo de sesión actual: {str(e2)}")
+                    session_start = datetime.fromisoformat(tiempo_data['current_session_start'])
+                    # Usar datetime.now() con timezone UTC para poder restar
+                    from datetime import timezone
+                    now = datetime.now(timezone.utc)
+                    tiempo_sesion_actual = (now - session_start).total_seconds()
+                    tiempo_calculado += tiempo_sesion_actual
+                    print(f"⏱️  [CALC] Sesión actual: +{tiempo_sesion_actual/3600:.2f}h")
+                except Exception as e:
+                    print(f"⚠️  [WARNING] Error al calcular sesión actual: {str(e)}")
+                    # Fallback: intentar sin timezone
+                    try:
+                        session_start_naive = datetime.fromisoformat(tiempo_data['current_session_start'].replace('+00:00', '').replace('Z', ''))
+                        tiempo_sesion_actual = (datetime.utcnow() - session_start_naive).total_seconds()
+                        tiempo_calculado += tiempo_sesion_actual
+                        print(f"⏱️  [CALC] Sesión actual (fallback): +{tiempo_sesion_actual/3600:.2f}h")
+                    except Exception as e2:
+                        print(f"⚠️  [ERROR] No se pudo calcular tiempo de sesión actual: {str(e2)}")
 
-        horas_actuales = tiempo_en_progreso_segundos / 3600
-        horas_limite = tiempo_max_segundos / 3600
-        print(f"⏱️  [CALC] Tiempo en progreso: {horas_actuales:.2f}h")
-        print(f"⏱️  [CALC] Límite configurado: {horas_limite:.2f}h")
+            horas = int(tiempo_calculado // 3600)
+            minutos = int((tiempo_calculado % 3600) // 60)
+            tiempo_str = f"{horas} horas y {minutos} minutos en progreso"
+
+            horas_actuales = tiempo_calculado / 3600
+            horas_limite = tiempo_max_segundos / 3600
+            print(f"⏱️  [CALC] Tiempo en progreso: {horas_actuales:.2f}h")
+            print(f"⏱️  [CALC] Límite configurado: {horas_limite:.2f}h")
 
         # Verificar si se superó el tiempo máximo (con margen de 30 segundos de tolerancia)
         MARGEN_TOLERANCIA = 30  # segundos
-        if tiempo_en_progreso_segundos >= (tiempo_max_segundos - MARGEN_TOLERANCIA):
+        if tiempo_calculado >= (tiempo_max_segundos - MARGEN_TOLERANCIA):
             print("\n" + "🚨"*20)
             print("🚨 ¡ALERTA ACTIVADA! - TIEMPO LÍMITE SUPERADO")
             print("🚨"*20)
-
-            # Formatear el tiempo en progreso para el email
-            horas = int(tiempo_en_progreso_segundos // 3600)
-            minutos = int((tiempo_en_progreso_segundos % 3600) // 60)
-            tiempo_en_progreso_str = f"{horas} horas y {minutos} minutos"
 
             # Obtener el nombre del proyecto
             proyecto_nombre = db.get_task_project_name(task_id)
@@ -1105,14 +1147,15 @@ def check_and_send_alert(task_id, task_name, task_url, date_updated, alert_confi
             print(f"📤 [EMAIL] Destinatario: {email_destino}")
             print(f"📤 [EMAIL] Tarea: {task_name}")
             print(f"📤 [EMAIL] Proyecto: {proyecto_nombre}")
-            print(f"📤 [EMAIL] Tiempo en progreso: {tiempo_en_progreso_str}")
+            print(f"📤 [EMAIL] Tiempo: {tiempo_str}")
 
             email_enviado = enviar_email_alerta(
                 email_destino,
                 task_name,
                 proyecto_nombre,
                 task_url,
-                tiempo_en_progreso_str
+                tiempo_str,
+                tipo_alerta
             )
 
             if email_enviado:
@@ -1121,7 +1164,7 @@ def check_and_send_alert(task_id, task_name, task_url, date_updated, alert_confi
                 print("✅"*20)
                 print(f"✅ [RESULT] Alerta enviada a: {email_destino}")
                 print(f"✅ [RESULT] Tarea: {task_name}")
-                print(f"✅ [RESULT] Tiempo: {tiempo_en_progreso_str}")
+                print(f"✅ [RESULT] Tiempo: {tiempo_str}")
 
                 # Desactivar la alerta después del envío
                 db.deactivate_task_alert(task_id)
@@ -1141,7 +1184,7 @@ def check_and_send_alert(task_id, task_name, task_url, date_updated, alert_confi
                 print(f"❌ [ERROR] Revisa la configuración SMTP y los logs anteriores")
                 print("❌"*20 + "\n")
         else:
-            diferencia = tiempo_max_segundos - tiempo_en_progreso_segundos
+            diferencia = tiempo_max_segundos - tiempo_calculado
             print(f"✓ [OK] Tarea dentro del límite. Faltan {diferencia/3600:.2f}h para activar alerta")
 
         print("="*80 + "\n")
@@ -1749,9 +1792,10 @@ def guardar_alerta_tarea():
         email_aviso = data.get('email_aviso', '')
         aviso_horas = int(data.get('aviso_horas', 0))
         aviso_minutos = int(data.get('aviso_minutos', 0))
+        tipo_alerta = data.get('tipo_alerta', 'sin_actualizar')
 
         # Guardar en base de datos
-        db.save_task_alert(tarea_id, aviso_activado, email_aviso, aviso_horas, aviso_minutos)
+        db.save_task_alert(tarea_id, aviso_activado, email_aviso, aviso_horas, aviso_minutos, tipo_alerta)
 
         # Mantener también en memoria para compatibilidad
         alertas_tareas[tarea_id] = {
@@ -1759,6 +1803,7 @@ def guardar_alerta_tarea():
             'email_aviso': email_aviso,
             'aviso_horas': aviso_horas,
             'aviso_minutos': aviso_minutos,
+            'tipo_alerta': tipo_alerta,
             'ultima_actualizacion': datetime.now().isoformat()
         }
 
@@ -1787,7 +1832,8 @@ def obtener_alerta_tarea_endpoint(tarea_id):
                 'aviso_activado': False,
                 'email_aviso': '',
                 'aviso_horas': 0,
-                'aviso_minutos': 0
+                'aviso_minutos': 0,
+                'tipo_alerta': 'sin_actualizar'
             }
 
         return jsonify(alerta)
@@ -1795,7 +1841,7 @@ def obtener_alerta_tarea_endpoint(tarea_id):
         print(f"[ERROR] Error al obtener alerta de tarea: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-def enviar_email_alerta(email_destino, tarea_nombre, proyecto_nombre, tarea_url, tiempo_en_progreso):
+def enviar_email_alerta(email_destino, tarea_nombre, proyecto_nombre, tarea_url, tiempo_en_progreso, tipo_alerta='sin_actualizar'):
     """Envía un email de alerta usando Brevo API (no SMTP porque Render bloquea puerto 587)"""
     try:
         # Verificar configuración
@@ -1804,6 +1850,14 @@ def enviar_email_alerta(email_destino, tarea_nombre, proyecto_nombre, tarea_url,
             return False
 
         print(f"[EMAIL] Enviando alerta para '{tarea_nombre}' a {email_destino}...")
+
+        # Personalizar el mensaje según el tipo de alerta
+        if tipo_alerta == 'sin_actualizar':
+            titulo_alerta = "Alerta: Tarea sin actualizar"
+            mensaje_tiempo = f"⏱️ Esta tarea lleva <strong>{tiempo_en_progreso}</strong> sin actualizaciones y ha superado el tiempo máximo configurado."
+        else:  # tiempo_total
+            titulo_alerta = "Alerta de Tiempo Total en Tarea"
+            mensaje_tiempo = f"⏱️ Esta tarea lleva <strong>{tiempo_en_progreso}</strong> en estado \"En Progreso\" y ha superado el tiempo máximo configurado."
 
         # Crear el cuerpo del email en HTML
         html_content = f"""
@@ -1824,14 +1878,13 @@ def enviar_email_alerta(email_destino, tarea_nombre, proyecto_nombre, tarea_url,
             <div class="container">
               <div class="header">
                 <div class="warning-icon">⚠️</div>
-                <h2 style="margin: 0;">Alerta de Demora en Tarea</h2>
+                <h2 style="margin: 0;">{titulo_alerta}</h2>
               </div>
               <div class="content">
                 <p><strong>Proyecto:</strong> {proyecto_nombre}</p>
                 <p><strong>Tarea:</strong> {tarea_nombre}</p>
                 <p style="font-size: 16px; color: #d9534f;">
-                  ⏱️ Esta tarea lleva <strong>{tiempo_en_progreso}</strong> en estado "En Progreso"
-                  y ha superado el tiempo máximo configurado.
+                  {mensaje_tiempo}
                 </p>
                 <p>Por favor, revisa el estado de esta tarea y toma las acciones necesarias:</p>
                 <a href="{tarea_url}" class="btn">Ver Tarea en ClickUp</a>
@@ -1846,6 +1899,12 @@ def enviar_email_alerta(email_destino, tarea_nombre, proyecto_nombre, tarea_url,
         </html>
         """
 
+        # Personalizar el subject según el tipo de alerta
+        if tipo_alerta == 'sin_actualizar':
+            subject = f"⚠️ Alerta: Tarea sin actualizar \"{tarea_nombre}\" - {proyecto_nombre}"
+        else:
+            subject = f"⚠️ Alerta: Demora en tarea \"{tarea_nombre}\" - {proyecto_nombre}"
+
         # Preparar el payload para la API de Brevo
         payload = {
             "sender": {
@@ -1858,7 +1917,7 @@ def enviar_email_alerta(email_destino, tarea_nombre, proyecto_nombre, tarea_url,
                     "name": email_destino.split('@')[0]
                 }
             ],
-            "subject": f"⚠️ Alerta: Demora en tarea \"{tarea_nombre}\" - {proyecto_nombre}",
+            "subject": subject,
             "htmlContent": html_content
         }
 

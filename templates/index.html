@@ -493,12 +493,23 @@
                 <input type="hidden" id="modal-tarea-id">
 
                 <div class="form-group">
+                    <label for="tipo-alerta">Tipo de alerta:</label>
+                    <select id="tipo-alerta" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px; width: 100%;">
+                        <option value="sin_actualizar">Tiempo sin actualizar progreso</option>
+                        <option value="tiempo_total">Tiempo total de tarea</option>
+                    </select>
+                    <p style="font-size: 12px; color: #666; margin-top: 5px;" id="tipo-alerta-descripcion">
+                        Se enviará un email si la tarea en progreso no se actualiza en el tiempo configurado.
+                    </p>
+                </div>
+
+                <div class="form-group">
                     <label for="email-aviso">Email para notificaciones:</label>
                     <input type="email" id="email-aviso" placeholder="ejemplo@correo.com">
                 </div>
 
                 <div class="form-group">
-                    <label>Tiempo sin actualización para enviar alerta:</label>
+                    <label id="tiempo-label">Tiempo sin actualización para enviar alerta:</label>
                     <div class="inline-inputs">
                         <div style="display: flex; flex-direction: column; margin-right: 10px;">
                             <label for="aviso-horas" style="font-size: 12px; margin-bottom: 3px; color: #666;">Horas</label>
@@ -645,6 +656,12 @@
         document.addEventListener('DOMContentLoaded', async function () {
             await cargarSpaces();
             await restaurarSelecciones();
+
+            // Agregar listener al selector de tipo de alerta
+            const tipoAlertaSelect = document.getElementById('tipo-alerta');
+            if (tipoAlertaSelect) {
+                tipoAlertaSelect.addEventListener('change', actualizarTextosTipoAlerta);
+            }
         });
 
         // === Gestión de tiempo en vivo ===
@@ -1033,6 +1050,21 @@
             document.getElementById('error-message').classList.add('hidden');
         }
 
+        // Función para actualizar textos según el tipo de alerta seleccionado
+        function actualizarTextosTipoAlerta() {
+            const tipoAlerta = document.getElementById('tipo-alerta').value;
+            const descripcion = document.getElementById('tipo-alerta-descripcion');
+            const label = document.getElementById('tiempo-label');
+
+            if (tipoAlerta === 'sin_actualizar') {
+                descripcion.textContent = 'Se enviará un email si la tarea en progreso no se actualiza en el tiempo configurado.';
+                label.textContent = 'Tiempo sin actualización para enviar alerta:';
+            } else if (tipoAlerta === 'tiempo_total') {
+                descripcion.textContent = 'Se enviará un email si el tiempo total de la tarea en progreso supera el tiempo configurado.';
+                label.textContent = 'Tiempo total de tarea para enviar alerta:';
+            }
+        }
+
         // Funciones para el modal de alertas
         async function abrirModalAlerta(tareaId, tareaNombre) {
             const modal = document.getElementById('alerta-modal');
@@ -1041,6 +1073,7 @@
             const emailAviso = document.getElementById('email-aviso');
             const avisoHoras = document.getElementById('aviso-horas');
             const avisoMinutos = document.getElementById('aviso-minutos');
+            const tipoAlerta = document.getElementById('tipo-alerta');
 
             // Establecer el ID y nombre de la tarea
             modalTareaId.value = tareaId;
@@ -1054,13 +1087,18 @@
                 emailAviso.value = alerta.email_aviso || '';
                 avisoHoras.value = alerta.aviso_horas || 0;
                 avisoMinutos.value = alerta.aviso_minutos || 0;
+                tipoAlerta.value = alerta.tipo_alerta || 'sin_actualizar';
             } catch (error) {
                 console.error('Error al cargar configuración de alerta:', error);
                 // Valores por defecto si hay error
                 emailAviso.value = '';
                 avisoHoras.value = 0;
                 avisoMinutos.value = 0;
+                tipoAlerta.value = 'sin_actualizar';
             }
+
+            // Actualizar descripción y etiquetas según el tipo seleccionado
+            actualizarTextosTipoAlerta();
 
             modal.style.display = 'block';
         }
@@ -1084,6 +1122,7 @@
             const emailAviso = document.getElementById('email-aviso').value;
             const avisoHoras = parseInt(document.getElementById('aviso-horas').value) || 0;
             const avisoMinutos = parseInt(document.getElementById('aviso-minutos').value) || 0;
+            const tipoAlerta = document.getElementById('tipo-alerta').value;
 
             // Validaciones
             if (!emailAviso) {
@@ -1106,7 +1145,8 @@
                         aviso_activado: true,
                         email_aviso: emailAviso,
                         aviso_horas: avisoHoras,
-                        aviso_minutos: avisoMinutos
+                        aviso_minutos: avisoMinutos,
+                        tipo_alerta: tipoAlerta
                     })
                 });
 
@@ -1132,6 +1172,7 @@
         // Función para desactivar alerta
         async function desactivarAlerta() {
             const tareaId = document.getElementById('modal-tarea-id').value;
+            const tipoAlerta = document.getElementById('tipo-alerta').value;
 
             try {
                 const response = await fetch('/api/alerta/tarea/guardar', {
@@ -1144,7 +1185,8 @@
                         aviso_activado: false,
                         email_aviso: '',
                         aviso_horas: 0,
-                        aviso_minutos: 0
+                        aviso_minutos: 0,
+                        tipo_alerta: tipoAlerta
                     })
                 });
 

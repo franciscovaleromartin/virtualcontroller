@@ -111,6 +111,7 @@ def init_db():
                 email_aviso TEXT,
                 aviso_horas INTEGER DEFAULT 0,
                 aviso_minutos INTEGER DEFAULT 0,
+                tipo_alerta TEXT DEFAULT 'sin_actualizar',
                 ultima_actualizacion TIMESTAMP,
                 ultimo_envio_email TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -165,6 +166,25 @@ def init_db():
 
         conn.commit()
         print("[INFO] Base de datos inicializada correctamente")
+
+
+def migrate_db():
+    """Ejecuta migraciones de base de datos para actualizaciones"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        # Verificar si la columna tipo_alerta existe en task_alerts
+        cursor.execute("PRAGMA table_info(task_alerts)")
+        columns = [column[1] for column in cursor.fetchall()]
+
+        if 'tipo_alerta' not in columns:
+            print("[INFO] Agregando columna 'tipo_alerta' a task_alerts...")
+            cursor.execute("""
+                ALTER TABLE task_alerts
+                ADD COLUMN tipo_alerta TEXT DEFAULT 'sin_actualizar'
+            """)
+            conn.commit()
+            print("[INFO] Columna 'tipo_alerta' agregada exitosamente")
 
 
 # === FUNCIONES PARA SPACES ===
@@ -430,24 +450,25 @@ def delete_task(task_id):
 
 # === FUNCIONES PARA TASK ALERTS ===
 
-def save_task_alert(task_id, aviso_activado, email_aviso, aviso_horas, aviso_minutos):
+def save_task_alert(task_id, aviso_activado, email_aviso, aviso_horas, aviso_minutos, tipo_alerta='sin_actualizar'):
     """Guarda o actualiza la configuración de alerta de una tarea"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO task_alerts (
-                task_id, aviso_activado, email_aviso, aviso_horas, aviso_minutos,
+                task_id, aviso_activado, email_aviso, aviso_horas, aviso_minutos, tipo_alerta,
                 ultima_actualizacion, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT(task_id) DO UPDATE SET
                 aviso_activado = excluded.aviso_activado,
                 email_aviso = excluded.email_aviso,
                 aviso_horas = excluded.aviso_horas,
                 aviso_minutos = excluded.aviso_minutos,
+                tipo_alerta = excluded.tipo_alerta,
                 ultima_actualizacion = CURRENT_TIMESTAMP,
                 updated_at = CURRENT_TIMESTAMP
-        """, (task_id, aviso_activado, email_aviso, aviso_horas, aviso_minutos))
+        """, (task_id, aviso_activado, email_aviso, aviso_horas, aviso_minutos, tipo_alerta))
         conn.commit()
 
 
@@ -711,11 +732,72 @@ def calculate_task_time_in_progress(task_id):
         }
 
 
+def calculate_time_since_last_update(task_id):
+    """
+    Calcula el tiempo desde la última actualización de la tarea
+    Retorna un diccionario con:
+    - seconds_since_update: segundos desde la última actualización
+    - last_update_time: timestamp de la última actualización
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        # Primero intentar obtener la última actualización del historial de estado
+        cursor.execute("""
+            SELECT changed_at
+            FROM task_status_history
+            WHERE task_id = ?
+            ORDER BY changed_at DESC
+            LIMIT 1
+        """, (task_id,))
+
+        row = cursor.fetchone()
+        last_update = None
+
+        if row:
+            last_update = dict(row)['changed_at']
+        else:
+            # Si no hay historial, usar date_updated de la tarea
+            cursor.execute("SELECT date_updated FROM tasks WHERE id = ?", (task_id,))
+            row = cursor.fetchone()
+            if row:
+                last_update = dict(row)['date_updated']
+
+        if not last_update:
+            print(f"[WARNING] No se pudo obtener fecha de última actualización para tarea {task_id}")
+            return {
+                'seconds_since_update': 0,
+                'last_update_time': None
+            }
+
+        # Parsear timestamp
+        try:
+            last_update_dt = datetime.fromisoformat(last_update.replace('Z', '+00:00'))
+        except (ValueError, TypeError) as e:
+            print(f"[ERROR] Error al parsear fecha '{last_update}' para tarea {task_id}: {str(e)}")
+            return {
+                'seconds_since_update': 0,
+                'last_update_time': None
+            }
+
+        # Calcular diferencia con el tiempo actual
+        now = datetime.now(last_update_dt.tzinfo) if last_update_dt.tzinfo else datetime.now()
+        seconds_since = (now - last_update_dt).total_seconds()
+
+        return {
+            'seconds_since_update': seconds_since,
+            'last_update_time': last_update
+        }
+
+
 # Inicializar base de datos al importar el módulo
 try:
     print("[DB] Inicializando base de datos...", flush=True)
     init_db()
     print("[DB] Base de datos inicializada correctamente", flush=True)
+    print("[DB] Ejecutando migraciones...", flush=True)
+    migrate_db()
+    print("[DB] Migraciones completadas", flush=True)
 except Exception as e:
     print(f"[DB ERROR] No se pudo inicializar la base de datos: {e}", flush=True)
     import traceback
