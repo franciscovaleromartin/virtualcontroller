@@ -1,27 +1,73 @@
+# Environment variables and credentials
 .env
+.env.local
+.env.*.local
 oauth_credentials.json
 credentials.json
 *_credentials.json
+token.json
+*.pem
+*.key
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
 env/
 venv/
+ENV/
+VENV/
+.venv
 
 # Database
 *.db
 *.sqlite
 *.sqlite3
+*.db-journal
 
 # Test and debug files
 test_*.py
 debug_*.py
 *_test.py
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Logs
 *.log
+logs/
 
 # OS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+*.pid
