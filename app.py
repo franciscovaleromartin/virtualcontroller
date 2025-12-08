@@ -1894,7 +1894,7 @@ def enviar_email_alerta(email_destino, tarea_nombre, proyecto_nombre, tarea_url,
                 <a href="{tarea_url}" class="btn">Ver Tarea en ClickUp</a>
               </div>
               <div class="footer">
-                <p>Este es un email automático del sistema Virtual Controller SIDN.</p>
+                <p>Este es un email automático del sistema Virtual Controller.</p>
                 <p>La alerta ha sido desactivada automáticamente. Para recibir una nueva alerta,
                    reactiva la configuración desde el panel de control.</p>
               </div>
@@ -1912,7 +1912,7 @@ def enviar_email_alerta(email_destino, tarea_nombre, proyecto_nombre, tarea_url,
         # Preparar el payload para la API de Brevo
         payload = {
             "sender": {
-                "name": "Virtual Controller SIDN",
+                "name": "Virtual Controller",
                 "email": SMTP_EMAIL
             },
             "to": [

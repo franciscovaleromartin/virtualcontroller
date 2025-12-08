@@ -1,4 +1,4 @@
-# Virtual Controller SIDN
+# Virtual Controller
 
 ## ¿Qué es?
 
