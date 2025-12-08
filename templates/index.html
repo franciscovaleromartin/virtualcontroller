@@ -1,0 +1,1469 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtual Controller</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #ffffff 0%, #fff5f0 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%);
+            color: white;
+            padding: 30px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-content {
+            flex: 1;
+        }
+
+        .header-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-refresh, .btn-import {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+
+        .btn-refresh:hover, .btn-import:hover {
+            background: white;
+            color: #ff6b35;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .selector-section {
+            margin-bottom: 30px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: 600;
+            color: #333;
+            font-size: 1.1em;
+        }
+
+        select {
+            width: 100%;
+            padding: 12px 16px;
+            font-size: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        select:hover {
+            border-color: #ff6b35;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: #ff6b35;
+            box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #ff6b35;
+            font-size: 1.2em;
+        }
+
+        .error {
+            background: #fee;
+            border: 2px solid #fcc;
+            color: #c33;
+            padding: 16px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            margin-top: 30px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+
+        th {
+            background: #f8f9fa;
+            padding: 16px;
+            text-align: left;
+            font-weight: 600;
+            color: #495057;
+            border-bottom: 2px solid #e0e0e0;
+            font-size: 0.95em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        td {
+            padding: 16px;
+            border-bottom: 1px solid #f0f0f0;
+            color: #333;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .tarea-completada {
+            background-color: #d4edda !important;
+        }
+
+        .tarea-completada:hover {
+            background-color: #c3e6cb !important;
+        }
+
+        .tarea-en-progreso {
+            background-color: #fff3cd !important;
+        }
+
+        .tarea-en-progreso:hover {
+            background-color: #ffecb3 !important;
+        }
+
+        .btn-config {
+            background: #ff6b35;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s;
+        }
+
+        .btn-config:hover {
+            background: #ff5722;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 10% auto;
+            padding: 30px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            margin-bottom: 20px;
+        }
+
+        .modal-header h2 {
+            color: #ff6b35;
+            font-size: 1.5em;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group input[type="text"],
+        .form-group input[type="email"],
+        .form-group input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .form-group input[type="checkbox"] {
+            margin-right: 8px;
+        }
+
+        .inline-inputs {
+            display: flex;
+            gap: 10px;
+        }
+
+        .inline-inputs input {
+            flex: 1;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #ff6b35;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #ff5722;
+        }
+
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #d0d0d0;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .alerta-activa {
+            background-color: #fff3cd !important;
+        }
+
+        .alerta-activa:hover {
+            background-color: #ffecb3 !important;
+        }
+
+        .total-horas {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 2px solid #ff6b35;
+            text-align: center;
+        }
+
+        .total-horas h3 {
+            color: #ff6b35;
+            font-size: 1.5em;
+            margin-bottom: 10px;
+        }
+
+        .total-horas .valor {
+            font-size: 2em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .tarea-link {
+            color: #ff6b35;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        .tarea-link:hover {
+            color: #ff5722;
+            text-decoration: underline;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* Estilos para el modal de importar informe */
+        .form-group input[type="date"] {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .google-auth-section {
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .google-auth-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .status-indicator.connected {
+            background-color: #4caf50;
+        }
+
+        .status-indicator.disconnected {
+            background-color: #ff5722;
+        }
+
+        .btn-google {
+            background: #4285f4;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-google:hover {
+            background: #357ae8;
+        }
+
+        .btn-google:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+
+        @media (max-width: 768px) {
+            .content {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 1.8em;
+            }
+
+            table {
+                font-size: 14px;
+            }
+
+            th,
+            td {
+                padding: 12px 8px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <h1>Virtual Controller</h1>
+                <div class="subtitle">Sistema de monitoreo y alertas para ClickUp</div>
+            </div>
+            <div class="header-buttons">
+                <button class="btn-refresh" onclick="refrescarPagina()">🔄 Refrescar</button>
+                <button class="btn-import" onclick="abrirModalImportar()">📊 Importar Informe</button>
+            </div>
+        </header>
+
+        <div class="content">
+            <div class="selector-section">
+                <label for="space-select">Selecciona un Trabajo (Space):</label>
+                <select id="space-select">
+                    <option value="">Cargando espacios...</option>
+                </select>
+            </div>
+
+            <div class="selector-section" id="project-section" style="display: none;">
+                <label for="project-select">Selecciona un Proyecto:</label>
+                <select id="project-select">
+                    <option value="">-- Selecciona un proyecto --</option>
+                </select>
+            </div>
+
+            <div id="error-message" class="error hidden"></div>
+            <div id="loading" class="loading hidden">Cargando listas...</div>
+
+            <div id="table-container" class="table-container hidden">
+                <table id="lists-table">
+                    <thead>
+                        <tr>
+                            <th>Tarea</th>
+                            <th>Estado</th>
+                            <th>Tiempo en Progreso</th>
+                            <th>Última Actualización</th>
+                            <th>Configuración de Alerta</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lists-tbody">
+                    </tbody>
+                </table>
+                <div id="total-tiempo-container" class="total-horas hidden">
+                    <h3>Tiempo Total del Proyecto</h3>
+                    <div class="valor" id="total-tiempo-en-progreso">0h 0m 0s</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para configurar alertas -->
+    <div id="alerta-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Configurar Alerta</h2>
+                <p id="modal-tarea-nombre" style="color: #666; margin-top: 5px;"></p>
+            </div>
+            <form id="alerta-form">
+                <input type="hidden" id="modal-tarea-id">
+
+                <div class="form-group">
+                    <label for="tipo-alerta">Tipo de alerta:</label>
+                    <select id="tipo-alerta" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px; width: 100%;">
+                        <option value="sin_actualizar">Tiempo sin actualizar progreso</option>
+                        <option value="tiempo_total">Tiempo total de tarea en progreso</option>
+                    </select>
+                    <p style="font-size: 12px; color: #666; margin-top: 5px;" id="tipo-alerta-descripcion">
+                        Se enviará un email si la tarea en progreso no se actualiza en el tiempo configurado.
+                    </p>
+                </div>
+
+                <div class="form-group">
+                    <label for="email-aviso">Email para notificaciones:</label>
+                    <input type="email" id="email-aviso" placeholder="ejemplo@correo.com">
+                </div>
+
+                <div class="form-group">
+                    <label id="tiempo-label">Tiempo sin actualización para enviar alerta:</label>
+                    <div class="inline-inputs">
+                        <div style="display: flex; flex-direction: column; margin-right: 10px;">
+                            <label for="aviso-dias" style="font-size: 12px; margin-bottom: 3px; color: #666;">Días</label>
+                            <input type="number" id="aviso-dias" placeholder="0" min="0" value="0" style="width: 80px;">
+                        </div>
+                        <div style="display: flex; flex-direction: column; margin-right: 10px;">
+                            <label for="aviso-horas" style="font-size: 12px; margin-bottom: 3px; color: #666;">Horas</label>
+                            <input type="number" id="aviso-horas" placeholder="0" min="0" value="0" style="width: 80px;">
+                        </div>
+                        <div style="display: flex; flex-direction: column;">
+                            <label for="aviso-minutos" style="font-size: 12px; margin-bottom: 3px; color: #666;">Minutos</label>
+                            <input type="number" id="aviso-minutos" placeholder="0" min="0" value="0" style="width: 80px;">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-buttons">
+                    <button type="button" class="btn btn-secondary" onclick="desactivarAlerta()">Desactivar</button>
+                    <button type="button" class="btn btn-primary" onclick="activarAlerta()">Activar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal para importar informe a Google Sheets -->
+    <div id="importar-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Importar Informe a Google Sheets</h2>
+                <p style="color: #666; margin-top: 5px;">Exporta el informe de horas de proyectos</p>
+            </div>
+
+            <!-- Sección de autenticación con Google -->
+            <div class="google-auth-section">
+                <div class="google-auth-status">
+                    <span class="status-indicator disconnected" id="google-status-indicator"></span>
+                    <span id="google-status-text">No conectado a Google</span>
+                </div>
+                <button type="button" class="btn-google" id="btn-google-login" onclick="iniciarLoginGoogle()">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M17.64 9.2C17.64 8.46 17.58 7.92 17.45 7.36H9V10.7H13.96C13.86 11.53 13.32 12.78 12.12 13.62L12.11 13.73L14.78 15.79L14.96 15.81C16.66 14.25 17.64 11.94 17.64 9.2Z" fill="#4285F4"/>
+                        <path d="M9 18C11.43 18 13.47 17.19 14.96 15.81L12.12 13.62C11.36 14.15 10.34 14.52 9 14.52C6.62 14.52 4.61 12.96 3.88 10.84L3.77 10.85L1.01 12.99L0.98 13.09C2.46 16.03 5.48 18 9 18Z" fill="#34A853"/>
+                        <path d="M3.88 10.84C3.69 10.28 3.58 9.68 3.58 9.07C3.58 8.46 3.69 7.86 3.87 7.3L3.87 7.18L1.08 5.01L0.98 5.05C0.36 6.3 0 7.71 0 9.13C0 10.55 0.36 11.96 0.98 13.21L3.88 10.84Z" fill="#FBBC05"/>
+                        <path d="M9 3.58C10.62 3.58 11.74 4.25 12.37 4.84L14.89 2.39C13.46 1.05 11.43 0.24 9 0.24C5.48 0.24 2.46 2.21 0.98 5.15L3.87 7.4C4.61 5.28 6.62 3.72 9 3.72V3.58Z" fill="#EB4335"/>
+                    </svg>
+                    Conectar con Google
+                </button>
+            </div>
+
+            <!-- Formulario de fechas y exportación -->
+            <form id="importar-form">
+                <div class="form-group">
+                    <label for="fecha-inicio">Fecha de Inicio:</label>
+                    <input type="date" id="fecha-inicio" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="fecha-fin">Fecha de Fin:</label>
+                    <input type="date" id="fecha-fin" required>
+                </div>
+
+                <!-- Área de resultado de exportación -->
+                <div id="export-result" class="hidden" style="margin: 15px 0; padding: 15px; background: #e8f5e9; border-radius: 8px; border: 2px solid #4caf50;">
+                    <p style="margin: 0 0 10px 0; color: #2e7d32; font-weight: 600;">✓ Informe exportado exitosamente</p>
+                    <p style="margin: 0 0 8px 0; color: #666; font-size: 14px;">Se exportaron <span id="filas-exportadas">0</span> filas.</p>
+                    <a id="sheet-link" href="#" target="_blank" style="display: inline-block; padding: 8px 16px; background: #4285f4; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">📊 Ver Informe en Google Sheets</a>
+                </div>
+
+                <div class="modal-buttons">
+                    <button type="button" class="btn btn-secondary" onclick="cerrarModalImportar()">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="btn-exportar" onclick="exportarAGoogleSheets()" disabled>Importar Informe</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Variables globales para manejo de tiempo real
+        let timeTrackingData = {}; // {task_id: {total_seconds, current_session_start, is_currently_in_progress}}
+        let timeUpdateInterval = null;
+        let timeDataFetchInterval = null;
+        let currentProjectId = null;
+        let currentProjectType = null;
+
+        // Función para refrescar la página manteniendo los valores seleccionados
+        function refrescarPagina() {
+            // Guardar los valores actuales de los selectores
+            const spaceSelect = document.getElementById('space-select');
+            const projectSelect = document.getElementById('project-select');
+
+            if (spaceSelect.value) {
+                localStorage.setItem('selectedSpace', spaceSelect.value);
+            }
+
+            if (projectSelect.value) {
+                localStorage.setItem('selectedProject', projectSelect.value);
+            }
+
+            // Recargar la página
+            location.reload();
+        }
+
+        // Función para restaurar los valores seleccionados después de cargar
+        async function restaurarSelecciones() {
+            const selectedSpace = localStorage.getItem('selectedSpace');
+            const selectedProject = localStorage.getItem('selectedProject');
+
+            console.log('[Restaurar] Space guardado:', selectedSpace, 'Proyecto guardado:', selectedProject);
+
+            if (selectedSpace) {
+                const spaceSelect = document.getElementById('space-select');
+
+                // Esperar un momento para que las opciones estén cargadas
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+                spaceSelect.value = selectedSpace;
+                console.log('[Restaurar] Space seleccionado:', spaceSelect.value);
+
+                // Cargar los proyectos del space seleccionado
+                await cargarProyectos(selectedSpace);
+
+                if (selectedProject) {
+                    // Esperar un momento para que las opciones de proyecto estén cargadas
+                    await new Promise(resolve => setTimeout(resolve, 100));
+
+                    const projectSelect = document.getElementById('project-select');
+                    projectSelect.value = selectedProject;
+
+                    console.log('[Restaurar] Proyecto seleccionado:', projectSelect.value);
+
+                    // Verificar que el valor se haya establecido correctamente
+                    if (projectSelect.value === selectedProject) {
+                        console.log('[Restaurar] Cargando tareas del proyecto...');
+                        // Cargar las tareas del proyecto seleccionado
+                        const projectData = JSON.parse(selectedProject);
+                        await cargarTareasProyecto(projectData.type, projectData.id);
+                        console.log('[Restaurar] Tareas cargadas exitosamente');
+                    } else {
+                        console.warn('[Restaurar] No se pudo restaurar el proyecto seleccionado');
+                    }
+                }
+            } else {
+                console.log('[Restaurar] No hay selecciones previas para restaurar');
+            }
+        }
+
+        // Cargar Spaces al iniciar y restaurar selecciones
+        document.addEventListener('DOMContentLoaded', async function () {
+            await cargarSpaces();
+            await restaurarSelecciones();
+
+            // Agregar listener al selector de tipo de alerta
+            const tipoAlertaSelect = document.getElementById('tipo-alerta');
+            if (tipoAlertaSelect) {
+                tipoAlertaSelect.addEventListener('change', actualizarTextosTipoAlerta);
+            }
+        });
+
+        // === Gestión de tiempo en vivo ===
+
+        async function fetchAndUpdateTimeTracking() {
+            try {
+                // Verificar que tareasActuales esté definido y no esté vacío
+                if (!tareasActuales || tareasActuales.length === 0) {
+                    console.log('[Time Tracking] No hay tareas para actualizar');
+                    return;
+                }
+
+                // Obtener los IDs de todas las tareas actuales del proyecto
+                const taskIds = tareasActuales.map(tarea => tarea.id);
+
+                if (taskIds.length === 0) {
+                    console.log('[Time Tracking] No hay tareas para actualizar');
+                    return;
+                }
+
+                // Usar el endpoint batch para obtener datos de todas las tareas
+                const response = await fetch('/api/tasks/time-tracking/batch', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        task_ids: taskIds
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    timeTrackingData = data.tasks;
+                    console.log('[Time Tracking] Datos actualizados:', timeTrackingData);
+                } else {
+                    console.error('[Time Tracking] Error en respuesta:', data.error);
+                }
+            } catch (error) {
+                console.error('[Time Tracking] Error al obtener datos:', error);
+            }
+        }
+
+        async function startTimeTracking() {
+            // Limpiar intervalos anteriores si existen
+            if (timeUpdateInterval) {
+                clearInterval(timeUpdateInterval);
+            }
+            if (timeDataFetchInterval) {
+                clearInterval(timeDataFetchInterval);
+            }
+
+            console.log('[Time Tracking] Iniciando tracking para', tareasActuales?.length || 0, 'tareas');
+
+            // Verificar que tengamos tareas antes de continuar
+            if (!tareasActuales || tareasActuales.length === 0) {
+                console.warn('[Time Tracking] No hay tareas para trackear');
+                return;
+            }
+
+            // Obtener datos iniciales y esperar a que terminen
+            await fetchAndUpdateTimeTracking();
+
+            // Actualizar displays inmediatamente con los datos obtenidos
+            updateAllTimeDisplays();
+
+            // Actualizar displays cada segundo
+            timeUpdateInterval = setInterval(() => {
+                updateAllTimeDisplays();
+            }, 1000);
+
+            // Actualizar datos de estado cada 5 segundos para detectar cambios de estado
+            timeDataFetchInterval = setInterval(async () => {
+                await fetchAndUpdateTimeTracking();
+            }, 5000);
+        }
+
+        function stopTimeTracking() {
+            if (timeUpdateInterval) {
+                clearInterval(timeUpdateInterval);
+                timeUpdateInterval = null;
+            }
+            if (timeDataFetchInterval) {
+                clearInterval(timeDataFetchInterval);
+                timeDataFetchInterval = null;
+            }
+        }
+
+        function updateAllTimeDisplays() {
+            let totalSecondsProject = 0;
+
+            if (!tareasActuales || tareasActuales.length === 0) {
+                console.log('[Time Tracking] No hay tareas para mostrar');
+                return;
+            }
+
+            // Recorrer todas las tareas del proyecto actual
+            tareasActuales.forEach(tarea => {
+                const row = document.querySelector(`tr[data-task-id="${tarea.id}"]`);
+                const timeCell = row ? row.cells[2] : null;  // Celda de tiempo (índice 2: Nombre, Estado, Tiempo)
+
+                if (!row || !timeCell) {
+                    console.warn(`[Time Tracking] No se encontró la fila para tarea ${tarea.id}`);
+                    return;
+                }
+
+                // Obtener datos de tiempo de esta tarea (del endpoint de time tracking o de los datos iniciales)
+                const taskData = timeTrackingData[tarea.id];
+
+                // Determinar si está en progreso y obtener datos
+                let isInProgress = false;
+                let totalSeconds = 0;
+                let sessionStart = null;
+
+                if (taskData) {
+                    // Usar datos del endpoint de time tracking (más preciso)
+                    isInProgress = taskData.is_currently_in_progress;
+                    totalSeconds = taskData.total_seconds;
+                    sessionStart = taskData.current_session_start;
+                } else {
+                    // Fallback: usar datos iniciales de la tarea
+                    isInProgress = tarea.actualmente_en_progreso || false;
+                    totalSeconds = tarea.tiempo_total_segundos || 0;
+                    sessionStart = tarea.sesion_actual_inicio;
+                }
+
+                // Si la tarea está en progreso AHORA
+                if (isInProgress) {
+                    // Calcular tiempo adicional desde que empezó la sesión actual
+                    let additionalSeconds = 0;
+                    if (sessionStart) {
+                        const sessionStartDate = new Date(sessionStart);
+                        const now = new Date();
+                        additionalSeconds = Math.floor((now - sessionStartDate) / 1000);
+                    }
+
+                    const totalTaskSeconds = totalSeconds + additionalSeconds;
+
+                    // Actualizar celda de tiempo en vivo con estilo "activo"
+                    timeCell.textContent = '▶ ' + formatSeconds(totalTaskSeconds);
+                    timeCell.style.color = '#ff6b35';
+                    timeCell.style.fontWeight = 'bold';
+
+                    // Sumar al total del proyecto
+                    totalSecondsProject += totalTaskSeconds;
+                } else {
+                    // Para tareas que NO están en progreso, mostrar tiempo pausado
+                    // Usar total_seconds (suma de todos los períodos cerrados)
+                    const totalTaskSeconds = totalSeconds;
+
+                    // Mostrar con estilo "pausado"
+                    if (totalTaskSeconds > 0) {
+                        timeCell.textContent = '⏸ ' + formatSeconds(totalTaskSeconds);
+                        timeCell.style.color = '#999';
+                        timeCell.style.fontWeight = 'normal';
+                    } else {
+                        timeCell.textContent = '--';
+                        timeCell.style.color = '#999';
+                        timeCell.style.fontWeight = 'normal';
+                    }
+
+                    // Sumar al total del proyecto
+                    totalSecondsProject += totalTaskSeconds;
+                }
+            });
+
+            // Actualizar tiempo total del proyecto
+            const totalElement = document.getElementById('total-tiempo-en-progreso');
+            if (totalElement) {
+                totalElement.textContent = formatSeconds(totalSecondsProject);
+            }
+        }
+
+        function formatSeconds(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${hours}h ${minutes}m ${secs}s`;
+        }
+
+        function formatTimestampToLocal(isoTimestamp) {
+            // Convierte un timestamp ISO (UTC) a formato local del navegador
+            // Formato de salida: "YYYY-MM-DD HH:MM:SS"
+            if (!isoTimestamp) return '--';
+
+            try {
+                const date = new Date(isoTimestamp);
+                if (isNaN(date.getTime())) return '--';
+
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                const seconds = String(date.getSeconds()).padStart(2, '0');
+
+                return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+            } catch (error) {
+                console.error('Error al formatear timestamp:', error);
+                return '--';
+            }
+        }
+
+        // Función para cargar spaces
+        async function cargarSpaces() {
+            try {
+                const response = await fetch('/api/spaces');
+                const data = await response.json();
+
+                if (data.error) {
+                    mostrarError(data.error);
+                    return;
+                }
+
+                const select = document.getElementById('space-select');
+                select.innerHTML = '<option value="">-- Selecciona un espacio --</option>';
+
+                data.spaces.forEach(space => {
+                    const option = document.createElement('option');
+                    option.value = space.id;
+                    option.textContent = space.name;
+                    select.appendChild(option);
+                });
+
+                // Event listener para cuando se selecciona un space
+                select.addEventListener('change', function () {
+                    // Detener time tracking anterior
+                    stopTimeTracking();
+
+                    if (this.value) {
+                        cargarProyectos(this.value);
+                    } else {
+                        document.getElementById('project-section').style.display = 'none';
+                        document.getElementById('table-container').classList.add('hidden');
+                        currentProjectId = null;
+                        currentProjectType = null;
+                    }
+                });
+
+            } catch (error) {
+                mostrarError('Error al cargar los espacios: ' + error.message);
+            }
+        }
+
+        // Función para cargar proyectos de un space
+        async function cargarProyectos(spaceId) {
+            try {
+                const projectSection = document.getElementById('project-section');
+                const projectSelect = document.getElementById('project-select');
+                const tableContainer = document.getElementById('table-container');
+
+                // Ocultar tabla mientras se cargan proyectos
+                tableContainer.classList.add('hidden');
+
+                // Mostrar mensaje de carga
+                projectSelect.innerHTML = '<option value="">Cargando proyectos...</option>';
+                projectSection.style.display = 'block';
+
+                const response = await fetch(`/api/space/${spaceId}/projects`);
+                const data = await response.json();
+
+                if (data.error) {
+                    mostrarError(data.error);
+                    return;
+                }
+
+                // Llenar el selector de proyectos
+                projectSelect.innerHTML = '<option value="">-- Selecciona un proyecto --</option>';
+
+                data.projects.forEach(project => {
+                    const option = document.createElement('option');
+                    option.value = JSON.stringify({ type: project.type, id: project.type === 'folder' ? project.folder_id : project.list_id });
+                    option.textContent = project.name;
+                    projectSelect.appendChild(option);
+                });
+
+                // Event listener para cuando se selecciona un proyecto
+                projectSelect.onchange = function() {
+                    // Detener time tracking anterior
+                    stopTimeTracking();
+
+                    if (this.value) {
+                        const projectData = JSON.parse(this.value);
+                        cargarTareasProyecto(projectData.type, projectData.id);
+                    } else {
+                        tableContainer.classList.add('hidden');
+                        currentProjectId = null;
+                        currentProjectType = null;
+                    }
+                };
+
+            } catch (error) {
+                mostrarError('Error al cargar los proyectos: ' + error.message);
+            }
+        }
+
+        // Función para cargar tareas de un proyecto específico
+        async function cargarTareasProyecto(projectType, projectId) {
+            const loading = document.getElementById('loading');
+            const tableContainer = document.getElementById('table-container');
+            const tbody = document.getElementById('lists-tbody');
+            const totalTiempoContainer = document.getElementById('total-tiempo-container');
+
+            loading.classList.remove('hidden');
+            tableContainer.classList.add('hidden');
+            ocultarError();
+
+            try {
+                const response = await fetch(`/api/project/${projectType}/${projectId}/tasks`);
+                const data = await response.json();
+
+                if (data.error) {
+                    mostrarError(data.error);
+                    loading.classList.add('hidden');
+                    return;
+                }
+
+                tbody.innerHTML = '';
+                tareasActuales = data.tasks;
+
+                data.tasks.forEach(tarea => {
+                    const tr = document.createElement('tr');
+                    tr.setAttribute('data-task-id', tarea.id);
+
+                    // Aplicar clase según el estado
+                    if (tarea.estado === 'completada') {
+                        tr.className = 'tarea-completada';
+                    } else if (tarea.estado === 'en_progreso') {
+                        tr.className = 'tarea-en-progreso';
+                    }
+
+                    let estadoAlerta = 'Sin configurar';
+                    if (tarea.alerta && tarea.alerta.aviso_activado) {
+                        const dias = tarea.alerta.aviso_dias || 0;
+                        const horas = tarea.alerta.aviso_horas || 0;
+                        const minutos = tarea.alerta.aviso_minutos || 0;
+                        const tipoAlerta = tarea.alerta.tipo_alerta || 'sin_actualizar';
+
+                        const tiempoTexto = `${dias}d ${horas}h ${minutos}m`;
+                        const descripcion = tipoAlerta === 'sin_actualizar'
+                            ? 'desde la última actualización en progreso'
+                            : 'de tiempo máximo de progreso';
+
+                        estadoAlerta = `Activa (${tiempoTexto}) ${descripcion}`;
+                    }
+
+                    tr.innerHTML = `
+                        <td>
+                            <a href="${tarea.url}" target="_blank" class="tarea-link">${tarea.nombre}</a>
+                        </td>
+                        <td><strong>${tarea.estado_texto}</strong></td>
+                        <td style="color: #999;">--</td>
+                        <td>${formatTimestampToLocal(tarea.fecha_actualizacion)}</td>
+                        <td>
+                            <button class="btn-config" onclick="abrirModalAlerta('${tarea.id}', '${tarea.nombre.replace(/'/g, "\\'")}')">
+                                Configurar
+                            </button>
+                            <br><small>${estadoAlerta}</small>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+                totalTiempoContainer.classList.remove('hidden');
+
+                loading.classList.add('hidden');
+                tableContainer.classList.remove('hidden');
+
+                // Guardar proyecto actual
+                currentProjectId = projectId;
+                currentProjectType = projectType;
+
+                // Iniciar tracking de tiempo en vivo
+                startTimeTracking();
+
+                // Iniciar verificación periódica de alertas
+                iniciarVerificacionAlertas();
+
+            } catch (error) {
+                mostrarError('Error al cargar las tareas: ' + error.message);
+                loading.classList.add('hidden');
+            }
+        }
+
+        // Variable global para almacenar las tareas actuales
+        let tareasActuales = [];
+
+        // Funciones auxiliares
+        function mostrarError(mensaje) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = mensaje;
+            errorDiv.classList.remove('hidden');
+        }
+
+        function ocultarError() {
+            document.getElementById('error-message').classList.add('hidden');
+        }
+
+        // Función para actualizar textos según el tipo de alerta seleccionado
+        function actualizarTextosTipoAlerta() {
+            const tipoAlerta = document.getElementById('tipo-alerta').value;
+            const descripcion = document.getElementById('tipo-alerta-descripcion');
+            const label = document.getElementById('tiempo-label');
+
+            if (tipoAlerta === 'sin_actualizar') {
+                descripcion.textContent = 'Se enviará un email si la tarea en progreso no se actualiza en el tiempo configurado.';
+                label.textContent = 'Tiempo sin actualización para enviar alerta:';
+            } else if (tipoAlerta === 'tiempo_total') {
+                descripcion.textContent = 'Se enviará un email si el tiempo total de la tarea en progreso supera el tiempo configurado.';
+                label.textContent = 'Tiempo total de tarea en progreso para enviar alerta:';
+            }
+        }
+
+        // Funciones para el modal de alertas
+        async function abrirModalAlerta(tareaId, tareaNombre) {
+            const modal = document.getElementById('alerta-modal');
+            const modalTareaId = document.getElementById('modal-tarea-id');
+            const modalTareaNombre = document.getElementById('modal-tarea-nombre');
+            const emailAviso = document.getElementById('email-aviso');
+            const avisoDias = document.getElementById('aviso-dias');
+            const avisoHoras = document.getElementById('aviso-horas');
+            const avisoMinutos = document.getElementById('aviso-minutos');
+            const tipoAlerta = document.getElementById('tipo-alerta');
+
+            // Establecer el ID y nombre de la tarea
+            modalTareaId.value = tareaId;
+            modalTareaNombre.textContent = tareaNombre;
+
+            // Cargar la configuración actual de la alerta
+            try {
+                const response = await fetch(`/api/alerta/tarea/${tareaId}`);
+                const alerta = await response.json();
+
+                emailAviso.value = alerta.email_aviso || '';
+                avisoDias.value = alerta.aviso_dias || 0;
+                avisoHoras.value = alerta.aviso_horas || 0;
+                avisoMinutos.value = alerta.aviso_minutos || 0;
+                tipoAlerta.value = alerta.tipo_alerta || 'sin_actualizar';
+            } catch (error) {
+                console.error('Error al cargar configuración de alerta:', error);
+                // Valores por defecto si hay error
+                emailAviso.value = '';
+                avisoDias.value = 0;
+                avisoHoras.value = 0;
+                avisoMinutos.value = 0;
+                tipoAlerta.value = 'sin_actualizar';
+            }
+
+            // Actualizar descripción y etiquetas según el tipo seleccionado
+            actualizarTextosTipoAlerta();
+
+            modal.style.display = 'block';
+        }
+
+        function cerrarModal() {
+            const modal = document.getElementById('alerta-modal');
+            modal.style.display = 'none';
+        }
+
+        // Cerrar modal al hacer clic fuera de él
+        window.onclick = function (event) {
+            const modal = document.getElementById('alerta-modal');
+            if (event.target == modal) {
+                cerrarModal();
+            }
+        }
+
+        // Función para activar alerta
+        async function activarAlerta() {
+            const tareaId = document.getElementById('modal-tarea-id').value;
+            const emailAviso = document.getElementById('email-aviso').value;
+            const avisoDias = parseInt(document.getElementById('aviso-dias').value) || 0;
+            const avisoHoras = parseInt(document.getElementById('aviso-horas').value) || 0;
+            const avisoMinutos = parseInt(document.getElementById('aviso-minutos').value) || 0;
+            const tipoAlerta = document.getElementById('tipo-alerta').value;
+
+            // Validaciones
+            if (!emailAviso) {
+                alert('Por favor, ingresa un email para las notificaciones.');
+                return;
+            }
+            if (avisoDias === 0 && avisoHoras === 0 && avisoMinutos === 0) {
+                alert('Por favor, ingresa un tiempo de aviso mayor a 0.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/alerta/tarea/guardar', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        tarea_id: tareaId,
+                        aviso_activado: true,
+                        email_aviso: emailAviso,
+                        aviso_dias: avisoDias,
+                        aviso_horas: avisoHoras,
+                        aviso_minutos: avisoMinutos,
+                        tipo_alerta: tipoAlerta
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('Alerta activada correctamente');
+                    cerrarModal();
+                    // Recargar las tareas para mostrar la configuración actualizada
+                    const projectSelect = document.getElementById('project-select');
+                    if (projectSelect.value) {
+                        const projectData = JSON.parse(projectSelect.value);
+                        cargarTareasProyecto(projectData.type, projectData.id);
+                    }
+                } else {
+                    alert('Error al activar la alerta: ' + (result.error || 'Error desconocido'));
+                }
+            } catch (error) {
+                alert('Error al activar la alerta: ' + error.message);
+            }
+        }
+
+        // Función para desactivar alerta
+        async function desactivarAlerta() {
+            const tareaId = document.getElementById('modal-tarea-id').value;
+            const tipoAlerta = document.getElementById('tipo-alerta').value;
+
+            try {
+                const response = await fetch('/api/alerta/tarea/guardar', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        tarea_id: tareaId,
+                        aviso_activado: false,
+                        email_aviso: '',
+                        aviso_dias: 0,
+                        aviso_horas: 0,
+                        aviso_minutos: 0,
+                        tipo_alerta: tipoAlerta
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('Alerta desactivada correctamente');
+                    cerrarModal();
+                    // Recargar las tareas para mostrar la configuración actualizada
+                    const projectSelect = document.getElementById('project-select');
+                    if (projectSelect.value) {
+                        const projectData = JSON.parse(projectSelect.value);
+                        cargarTareasProyecto(projectData.type, projectData.id);
+                    }
+                } else {
+                    alert('Error al desactivar la alerta: ' + (result.error || 'Error desconocido'));
+                }
+            } catch (error) {
+                alert('Error al desactivar la alerta: ' + error.message);
+            }
+        }
+
+        // Variable para almacenar el intervalo de verificación
+        let intervaloVerificacion = null;
+
+        // Función para iniciar la verificación periódica de alertas
+        function iniciarVerificacionAlertas() {
+            // Limpiar cualquier intervalo previo
+            if (intervaloVerificacion) {
+                clearInterval(intervaloVerificacion);
+            }
+
+            // Verificar cada 5 minutos (300000 ms)
+            intervaloVerificacion = setInterval(async () => {
+                if (tareasActuales.length > 0) {
+                    try {
+                        const response = await fetch('/api/verificar-alertas', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                tareas: tareasActuales.map(t => ({ id: t.id }))
+                            })
+                        });
+
+                        const result = await response.json();
+
+                        if (result.success && result.alertas_enviadas.length > 0) {
+                            console.log('Alertas enviadas:', result.alertas_enviadas);
+                        }
+                    } catch (error) {
+                        console.error('Error al verificar alertas:', error);
+                    }
+                }
+            }, 300000); // 5 minutos
+
+            // También hacer una verificación inmediata
+            setTimeout(async () => {
+                if (tareasActuales.length > 0) {
+                    try {
+                        const response = await fetch('/api/verificar-alertas', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                tareas: tareasActuales.map(t => ({ id: t.id }))
+                            })
+                        });
+                    } catch (error) {
+                        console.error('Error al verificar alertas:', error);
+                    }
+                }
+            }, 5000); // 5 segundos después de cargar las tareas
+        }
+
+        // ============================================
+        // Funciones para Importar Informe a Google Sheets
+        // ============================================
+
+        // Variable global para almacenar el estado de autenticación de Google
+        let googleAuthToken = null;
+
+        // Abrir modal de importar informe
+        function abrirModalImportar() {
+            const modal = document.getElementById('importar-modal');
+            modal.style.display = 'block';
+
+            // Establecer fechas por defecto (último mes)
+            const hoy = new Date();
+            const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+
+            document.getElementById('fecha-fin').valueAsDate = hoy;
+            document.getElementById('fecha-inicio').valueAsDate = inicioMes;
+
+            // Verificar si ya hay autenticación guardada
+            verificarEstadoGoogleAuth();
+        }
+
+        // Cerrar modal de importar informe
+        function cerrarModalImportar() {
+            const modal = document.getElementById('importar-modal');
+            const exportResult = document.getElementById('export-result');
+            modal.style.display = 'none';
+            exportResult.classList.add('hidden');
+        }
+
+        // Cerrar modal al hacer click fuera
+        window.onclick = function(event) {
+            const modalAlerta = document.getElementById('alerta-modal');
+            const modalImportar = document.getElementById('importar-modal');
+
+            if (event.target == modalAlerta) {
+                modalAlerta.style.display = 'none';
+            }
+            if (event.target == modalImportar) {
+                modalImportar.style.display = 'none';
+            }
+        }
+
+        // Verificar estado de autenticación de Google
+        async function verificarEstadoGoogleAuth() {
+            try {
+                const response = await fetch('/api/google/auth-status');
+                const data = await response.json();
+
+                if (data.authenticated) {
+                    actualizarEstadoGoogleUI(true, data.email);
+                    googleAuthToken = data.token;
+                } else {
+                    actualizarEstadoGoogleUI(false);
+                }
+            } catch (error) {
+                console.error('Error al verificar estado de Google Auth:', error);
+                actualizarEstadoGoogleUI(false);
+            }
+        }
+
+        // Actualizar UI del estado de autenticación de Google
+        function actualizarEstadoGoogleUI(conectado, email = '') {
+            const indicator = document.getElementById('google-status-indicator');
+            const statusText = document.getElementById('google-status-text');
+            const btnLogin = document.getElementById('btn-google-login');
+            const btnExportar = document.getElementById('btn-exportar');
+
+            if (conectado) {
+                indicator.classList.remove('disconnected');
+                indicator.classList.add('connected');
+                statusText.textContent = email ? `Conectado como ${email}` : 'Conectado a Google';
+                btnLogin.textContent = 'Desconectar';
+                btnLogin.onclick = desconectarGoogle;
+                btnExportar.disabled = false;
+            } else {
+                indicator.classList.remove('connected');
+                indicator.classList.add('disconnected');
+                statusText.textContent = 'No conectado a Google';
+                btnLogin.innerHTML = '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M17.64 9.2C17.64 8.46 17.58 7.92 17.45 7.36H9V10.7H13.96C13.86 11.53 13.32 12.78 12.12 13.62L12.11 13.73L14.78 15.79L14.96 15.81C16.66 14.25 17.64 11.94 17.64 9.2Z" fill="#4285F4"/><path d="M9 18C11.43 18 13.47 17.19 14.96 15.81L12.12 13.62C11.36 14.15 10.34 14.52 9 14.52C6.62 14.52 4.61 12.96 3.88 10.84L3.77 10.85L1.01 12.99L0.98 13.09C2.46 16.03 5.48 18 9 18Z" fill="#34A853"/><path d="M3.88 10.84C3.69 10.28 3.58 9.68 3.58 9.07C3.58 8.46 3.69 7.86 3.87 7.3L3.87 7.18L1.08 5.01L0.98 5.05C0.36 6.3 0 7.71 0 9.13C0 10.55 0.36 11.96 0.98 13.21L3.88 10.84Z" fill="#FBBC05"/><path d="M9 3.58C10.62 3.58 11.74 4.25 12.37 4.84L14.89 2.39C13.46 1.05 11.43 0.24 9 0.24C5.48 0.24 2.46 2.21 0.98 5.15L3.87 7.4C4.61 5.28 6.62 3.72 9 3.72V3.58Z" fill="#EB4335"/></svg> Conectar con Google';
+                btnLogin.onclick = iniciarLoginGoogle;
+                btnExportar.disabled = true;
+                googleAuthToken = null;
+            }
+        }
+
+        // Iniciar login de Google
+        function iniciarLoginGoogle() {
+            // Abrir ventana de OAuth de Google
+            const width = 500;
+            const height = 600;
+            const left = (screen.width / 2) - (width / 2);
+            const top = (screen.height / 2) - (height / 2);
+
+            const authWindow = window.open(
+                '/oauth/google/login',
+                'Google OAuth',
+                `width=${width},height=${height},top=${top},left=${left}`
+            );
+
+            // Escuchar mensaje de la ventana de OAuth
+            window.addEventListener('message', function(event) {
+                if (event.data.type === 'google-auth-success') {
+                    googleAuthToken = event.data.token;
+                    actualizarEstadoGoogleUI(true, event.data.email);
+                    authWindow.close();
+                }
+            });
+        }
+
+        // Desconectar de Google
+        async function desconectarGoogle() {
+            try {
+                await fetch('/api/google/logout', { method: 'POST' });
+                actualizarEstadoGoogleUI(false);
+            } catch (error) {
+                console.error('Error al desconectar de Google:', error);
+                alert('Error al desconectar de Google');
+            }
+        }
+
+        // Exportar a Google Sheets
+        async function exportarAGoogleSheets() {
+            const fechaInicio = document.getElementById('fecha-inicio').value;
+            const fechaFin = document.getElementById('fecha-fin').value;
+
+            if (!fechaInicio || !fechaFin) {
+                alert('Por favor, selecciona las fechas de inicio y fin');
+                return;
+            }
+
+            if (new Date(fechaInicio) > new Date(fechaFin)) {
+                alert('La fecha de inicio debe ser anterior a la fecha de fin');
+                return;
+            }
+
+            const btnExportar = document.getElementById('btn-exportar');
+            const exportResult = document.getElementById('export-result');
+
+            btnExportar.disabled = true;
+            btnExportar.textContent = 'Exportando...';
+            exportResult.classList.add('hidden');
+
+            try {
+                const response = await fetch('/api/export-to-google-sheets', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        fecha_inicio: fechaInicio,
+                        fecha_fin: fechaFin
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Mostrar resultado en el modal
+                    document.getElementById('filas-exportadas').textContent = data.filas_escritas;
+                    document.getElementById('sheet-link').href = data.url;
+                    exportResult.classList.remove('hidden');
+
+                    // Scroll al resultado
+                    exportResult.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                } else {
+                    alert(`Error al exportar: ${data.error || 'Error desconocido'}`);
+                }
+            } catch (error) {
+                console.error('Error al exportar a Google Sheets:', error);
+                alert('Error al exportar el informe. Por favor, intenta de nuevo.');
+            } finally {
+                btnExportar.disabled = false;
+                btnExportar.textContent = 'Importar Informe';
+            }
+        }
+
+    </script>
+</body>
+
+</html>
