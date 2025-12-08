@@ -1,4 +1,7 @@
 .env
+oauth_credentials.json
+credentials.json
+*_credentials.json
 __pycache__/
 *.pyc
 *.pyo
