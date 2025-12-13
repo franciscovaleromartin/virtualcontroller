@@ -307,8 +307,8 @@ def handle_oauth_callback(code):
     print(f"[DEBUG] OAuth callback recibido con código: {code[:10]}...")
     token_url = "https://api.clickup.com/api/v2/oauth/token"
 
-    # ClickUp requiere estos parámetros como query params
-    params = {
+    # Parámetros OAuth enviados en el body por seguridad (no en la URL)
+    payload = {
         'client_id': CLICKUP_CLIENT_ID,
         'client_secret': CLICKUP_CLIENT_SECRET,
         'code': code
@@ -318,8 +318,8 @@ def handle_oauth_callback(code):
     print(f"[DEBUG] Client ID: {CLICKUP_CLIENT_ID[:10]}...")
 
     try:
-        # ClickUp OAuth requiere parámetros como query params, no como body
-        response = requests.post(token_url, params=params)
+        # Enviar credenciales en el body (POST data) en lugar de URL por seguridad
+        response = requests.post(token_url, data=payload)
 
         print(f"[DEBUG] Respuesta de ClickUp: Status {response.status_code}")
         print(f"[DEBUG] Response body: {response.text}")
